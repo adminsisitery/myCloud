@@ -8,14 +8,18 @@ import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.User;
+import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.StorageService;
 import com.ff.mycloud.service.StorageServiceFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @description: TODO 
@@ -27,14 +31,16 @@ import java.util.List;
 @Service
 public class FileServiceImpl implements FileService {
 
+    private final UserContext userContext;
     StorageServiceFactory storageServiceFactory;
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
 
-    public FileServiceImpl(StorageServiceFactory storageServiceFactory, FileMapper fileMapper, FileInfoMapperService fileInfoMapperService) {
+    public FileServiceImpl(StorageServiceFactory storageServiceFactory, FileMapper fileMapper, FileInfoMapperService fileInfoMapperService, UserContext userContext) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
+        this.userContext = userContext;
     }
 
     @Override
@@ -68,6 +74,14 @@ public class FileServiceImpl implements FileService {
             return fileInfo.getPath();
         }
         return null;
+    }
+
+    //显示文件列表
+    @Override
+    public List<FileListVO> listFiles(Long parentId) {
+        Long currentUserId = UserContext.getCurrentUserId();
+        List<FileInfo> fileInfos = fileInfoMapperService.findByParentIdAndUserId(currentUserId,parentId);
+        return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
     private String getUploadPath(Long parentId, User currentUser) {

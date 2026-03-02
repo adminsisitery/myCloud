@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface FileInfoMapperService extends IService<FileInfo> {
     List<FileInfo> findByHashAndUserId(String hash, Long userId);
+
+    List<FileInfo> findByParentIdAndUserId(Long currentUserId, Long parentId);
 }

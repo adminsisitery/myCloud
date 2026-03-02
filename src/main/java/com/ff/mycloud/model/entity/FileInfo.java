@@ -1,6 +1,7 @@
 package com.ff.mycloud.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -31,8 +32,9 @@ public class FileInfo {
 
     private Long parentId;
 
+    @TableField("isFolder")
     private Boolean isFolder;
-
+    @TableField("isDeleted")
     private Boolean isDeleted;
 
     private LocalDateTime createdAt;

@@ -6,6 +6,7 @@ import com.ff.mycloud.repositorys.FileInfoMapper;
 import com.ff.mycloud.service.FileInfoMapperService;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -27,6 +28,17 @@ public class FileInfoMapperServiceImpl
                 .eq(FileInfo::getSha256Hash, hash)
                 .eq(FileInfo::getUserId, userId)
                 .eq(FileInfo::getIsDeleted, false)
+                .list();
+    }
+
+    @Override
+    public List<FileInfo> findByParentIdAndUserId(Long currentUserId, Long parentId) {
+
+        return lambdaQuery()
+                .eq(FileInfo::getUserId, currentUserId)
+                .eq(FileInfo::getIsDeleted, false)
+                .eq(parentId != null, FileInfo::getParentId, parentId)
+                .isNull(parentId == null, FileInfo::getParentId)
                 .list();
     }
 
