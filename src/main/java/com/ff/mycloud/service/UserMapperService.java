@@ -9,4 +9,6 @@ public interface UserMapperService extends IService<User> {
     Optional<User> findByUsername(String username);
     Optional<User> findByEmail(String email);
     Optional<User> findByUserId(Long id);
+
+    User findByGithubId(String githubId);
 }

@@ -27,6 +27,8 @@ public class FileInfo {
 
     private String sha256Hash;
 
+    private String fileSuffix;
+
 
     private Long userId;
 
@@ -40,4 +42,6 @@ public class FileInfo {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+
 }

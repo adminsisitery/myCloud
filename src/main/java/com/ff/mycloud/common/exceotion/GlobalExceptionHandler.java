@@ -4,6 +4,7 @@ import cn.dev33.satoken.exception.NotLoginException;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.common.result.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import static cn.dev33.satoken.SaManager.log;
 
 /**
  * 全局异常处理器
@@ -31,6 +35,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(Result.error(401, "未登录或token无效"));
+    }
+
+    // 全局异常处理器里新增：打印请求URL
+    @ExceptionHandler(NoResourceFoundException.class)
+    public Result<Void> handleNoResourceFoundException(NoResourceFoundException e, HttpServletRequest request) {
+        log.error("静态资源找不到！请求URL：{}，错误信息：{}", request.getRequestURL(), e.getMessage());
+        return Result.error(500, "请求的资源不存在");
     }
 
     /**

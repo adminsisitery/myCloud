@@ -35,6 +35,7 @@ public enum ErrorCode {
     FOLDER_NOT_EMPTY(400, "文件夹不为空，无法删除"),
     CANNOT_DOWNLOAD_FOLDER(400, "不能下载文件夹"),
     INVALID_FILENAME(400, "新文件名不能为空"),
+    RENAME_FILL(400,"修改失败"),
     USERNAME_EXISTS(400, "用户名已存在"),
     EMAIL_EXISTS(400, "邮箱已被注册"),
     ACCOUNT_DISABLED(400, "账号已被禁用"),

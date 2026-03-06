@@ -31,4 +31,8 @@ public class User {
 
     @TableField("update_time")  // 显示指定字段名称映射
     private LocalDateTime updateTime;
+
+    private String githubId;
+
+    private String avatar;
 }

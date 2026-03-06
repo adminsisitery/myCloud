@@ -6,7 +6,7 @@ import com.ff.mycloud.repositorys.FileInfoMapper;
 import com.ff.mycloud.service.FileInfoMapperService;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -39,6 +39,32 @@ public class FileInfoMapperServiceImpl
                 .eq(FileInfo::getIsDeleted, false)
                 .eq(parentId != null, FileInfo::getParentId, parentId)
                 .isNull(parentId == null, FileInfo::getParentId)
+                .list();
+    }
+
+    @Override
+    public boolean UpdateFileNameByFileId(Long fileId, String newFilename, LocalDateTime now) {
+        return lambdaUpdate().eq(FileInfo::getId, fileId)
+                .set(FileInfo::getFilename, newFilename)
+                .set(FileInfo::getOriginalFilename, newFilename)
+                .set(FileInfo::getUpdatedAt,now)
+                .update();
+    }
+
+    @Override
+    public Long countFiles(String sha256Hash) {
+        return lambdaQuery()
+                .eq(FileInfo::getSha256Hash,sha256Hash)
+                .eq(FileInfo::getIsDeleted, false)
+                .count();
+    }
+
+    @Override
+    public List<FileInfo> findBykeyWord(String keyword, Long currentUserId) {
+        return lambdaQuery()
+                .like(FileInfo::getFilename,keyword)
+                .eq(FileInfo::getIsDeleted, false)
+                .eq(FileInfo::getUserId, currentUserId)
                 .list();
     }
 

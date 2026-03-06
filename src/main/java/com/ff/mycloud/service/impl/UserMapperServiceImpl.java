@@ -44,4 +44,15 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
                 .eq(User::getId, id)
                 .oneOpt();
     }
+
+    @Override
+    public User findByGithubId(String githubId) {
+        return lambdaQuery().eq(User::getGithubId, githubId).one();
+    }
+
+    public User findOneByUserId(Long id) {
+        return lambdaQuery()
+                .eq(User::getId, id)
+                .one();
+    }
 }

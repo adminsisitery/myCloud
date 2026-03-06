@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.ff.mycloud.common.util.EmailUtil;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.PasswordUtil;
+import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.model.dto.LoginDTO;
 import com.ff.mycloud.model.dto.RegisterDTO;
@@ -68,7 +69,7 @@ public class UserServiceImpl implements UserService {
         //登录
         StpUtil.login(user.getId());
         String token = StpUtil.getTokenValue();
-        logger.info("登录成功，用户名：{}，token：{}", loginDTO.getUsername(), token);
+        logger.info("登录成功，用户名：{}，token：{} id{}", loginDTO.getUsername(), token, UserContext.getCurrentUserId());
         //返回token
         return token;
     }

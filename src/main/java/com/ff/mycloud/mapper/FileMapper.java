@@ -57,10 +57,10 @@ public interface FileMapper {
     // 本地路径上传
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "filename", source = "filename")
-    @Mapping(target = "originalFilename", source = "filename")
+    @Mapping(target = "originalFilename", source = "originalFilename")
     @Mapping(target = "path", source = "filePath")
     @Mapping(target = "fileSize", source = "fileSize")
-    @Mapping(target = "fileType", expression = "java(com.ff.mycloud.common.util.FileTypeUtil.getContentTypeFromFileName(filename))")
+    @Mapping(target = "fileType", source = "fileType")
     @Mapping(target = "userId", source = "userId")
     @Mapping(target = "parentId", source = "parentId")
     @Mapping(target = "isFolder", constant = "false")
@@ -68,5 +68,6 @@ public interface FileMapper {
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "sha256Hash", source = "sha256Hash")
-    FileInfo toFileInfoFromPath(String filename, String filePath, Long fileSize, Long userId, Long parentId, String sha256Hash);
+    @Mapping(target = "fileSuffix",source = "suffix")
+    FileInfo toFileInfoFromPath(String filename, String filePath, Long fileSize, Long userId, Long parentId, String sha256Hash, String suffix, String fileType, String originalFilename);
 }
