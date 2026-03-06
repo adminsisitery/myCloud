@@ -1,0 +1,82 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cloud-drive
+
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://rm-bp1k9t18kfewh9780bo.mysql.rds.aliyuncs.com:3306/cloud_drive?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: LPF2005525a
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 5
+
+  # 邮件配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: 1323880492@qq.com
+    password: cowhuobbddvzbaej
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+      enabled: true
+  redis:
+    redisson:
+      config: |
+        singleServerConfig:
+          address: "redis://47.95.192.221:6379"
+          password: feifei2005525a
+          database: 0
+
+
+# Redisson配置
+# Sa-Token配置
+sa-token:
+  # token名称
+  token-name: Authorization
+  # token有效期
+  timeout: 2592000
+  # token临时有效期
+  active-timeout: -1
+  # 是否允许同一账号并发登录
+  is-concurrent: true
+  # 在多人登录同一账号时，是否共用一个token
+  is-share: true
+  # token风格
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: true
+  # 是否尝试从请求体里读取token
+  is-read-body: true
+  # 是否尝试从header里读取token
+  is-read-header: true
+  # 是否尝试从cookie里读取token
+  is-read-cookie: true
+  # token前缀
+  token-prefix: ""
+  # 使用 Redis Jackson DAO 存储 Sa-Token 数据
+  dao: redisJackson
+
+# OSS配置
+oss:
+  enabled: true
+  access-key-id: REDACTED_KEY
+  access-key-secret: REDACTED_SECRET
+  endpoint: oss-cn-hangzhou.aliyuncs.com
+  bucket-name: feifeioss
