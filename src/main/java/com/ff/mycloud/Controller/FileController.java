@@ -4,9 +4,11 @@ import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.UploadProgressMapper;
 import com.ff.mycloud.model.dto.FileRenameDTO;
+import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.UpLoadProgressService;
+import com.ff.mycloud.service.UserCenterMapperService;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -31,14 +33,18 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
+    private final UserContext userContext;
     FileService fileService;
     UpLoadProgressService upLoadProgressService;
     UploadProgressMapper uploadProgressMapper;
+    UserCenterMapperService userCenterMapperService;
 
-    public FileController( FileService fileService, UpLoadProgressService upLoadProgressService , UploadProgressMapper uploadProgressMapper) {
+    public FileController(FileService fileService, UserCenterMapperService userCenterMapperService, UpLoadProgressService upLoadProgressService , UploadProgressMapper uploadProgressMapper, UserContext userContext) {
         this.fileService = fileService;
         this.upLoadProgressService = upLoadProgressService;
         this.uploadProgressMapper = uploadProgressMapper;
+        this.userCenterMapperService = userCenterMapperService;
+        this.userContext = userContext;
     }
     //上传文件
     @PostMapping
@@ -79,6 +85,16 @@ public class FileController {
             return Result.error("文件为空");
         }
 
+        //检查是否超出可用空间
+        UserCenter userCenter = userCenterMapperService.getByUserId(UserContext.getCurrentUserId());
+        if (userCenter == null) {
+            return Result.error("用户错误");
+        }
+        //检查用户可用空间是否充足
+        if (userCenter.getTotalSpace() < userCenter.getUsedSpace()+file.getSize()){
+            return Result.error("用户可用空间不足");
+        }
+
         //创建临时文件夹
         File tmpDir = new File(System.getProperty("java.io.tmpdir"));
         if (!tmpDir.exists()) {
@@ -98,6 +114,9 @@ public class FileController {
                     if (tmpFile.exists()) {
                         tmpFile.delete();
                     }
+                    //上传完成后同时添加存储空间信息
+                    userCenter.setUsedSpace(userCenter.getUsedSpace()+file.getSize());
+                    userCenterMapperService.updateById(userCenter);
                 }
             });
         uploadThread.setDaemon(true);

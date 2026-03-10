@@ -9,6 +9,7 @@ import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.User;
+import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,14 +39,16 @@ public class FileServiceImpl implements FileService {
     StorageServiceFactory storageServiceFactory;
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
+    UserCenterMapperService userCenterMapperService;
 
-    public FileServiceImpl(StorageServiceFactory storageServiceFactory, FileMapper fileMapper, FileInfoMapperService fileInfoMapperService, UserContext userContext, UserMapperServiceImpl userMapperServiceImpl, UpLoadProgressService upLoadProgressService) {
+    public FileServiceImpl(StorageServiceFactory storageServiceFactory,UserCenterMapperService userCenterMapperService, FileMapper fileMapper, FileInfoMapperService fileInfoMapperService, UserContext userContext, UserMapperServiceImpl userMapperServiceImpl, UpLoadProgressService upLoadProgressService) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
         this.userContext = userContext;
         this.userMapperServiceImpl = userMapperServiceImpl;
         this.upLoadProgressService = upLoadProgressService;
+        this.userCenterMapperService = userCenterMapperService;
     }
 
     @Override
@@ -180,6 +184,11 @@ public class FileServiceImpl implements FileService {
         fileInfo.setIsDeleted(true);
         fileInfo.setUpdatedAt(LocalDateTime.now());
         fileInfoMapperService.updateById(fileInfo);
+        //1.5 同时删除减去的空间
+        UserCenter byUserId = userCenterMapperService.getByUserId(UserContext.getCurrentUserId());
+        Long usedSpace = byUserId.getUsedSpace();
+        byUserId.setUsedSpace(usedSpace - fileInfo.getFileSize());
+        userCenterMapperService.updateById(byUserId);
 
         // 2 再判断 hash 是否还有引用
         long referenceCount = fileInfoMapperService.countFiles(fileInfo.getSha256Hash());
@@ -206,6 +215,12 @@ public class FileServiceImpl implements FileService {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
         return retrieveFileContent(byId);
+    }
+
+    @Override
+    public InputStream getFile(String path) {
+        StorageService storageService = storageServiceFactory.getStorageService();
+        return storageService.getFile(path);
     }
 
     private byte[] retrieveFileContent(FileInfo andValidateFile) {
@@ -243,7 +258,8 @@ public class FileServiceImpl implements FileService {
 //    这个原理就是不用上传文件 在数据库生成一个记录就行 不管用户文甲明是不是一样 只要路径对应就行
     private FileInfo handleFastUpload(String filename, long fileSize, FileInfo existingFile, String sha256Hash, Long parentId, String taskId, User currentUser) {
         // 使用MapStruct创建一个新的文件记录
-        FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(filename, existingFile, currentUser.getId(), parentId, sha256Hash);
+        String filenames = filename.substring(0, filename.lastIndexOf("."));
+        FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(filename,filenames, existingFile, currentUser.getId(), parentId, sha256Hash);
 
 //         如果有任务ID，则进行进度跟踪
         if (taskId != null) {
@@ -255,6 +271,7 @@ public class FileServiceImpl implements FileService {
         // 保存新的文件记录
 //        return fileInfoRepository.save(newFileInfo);
         fileInfoMapperService.save(newFileInfo);
+
         return newFileInfo;
     }
 

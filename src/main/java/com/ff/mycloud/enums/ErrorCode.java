@@ -51,7 +51,8 @@ public enum ErrorCode {
     
     // 系统错误 (500)
     SYSTEM_ERROR(500, "系统错误"),
-    FILE_DOWNLOAD_FAILED(500, "文件下载失败");
+    FILE_DOWNLOAD_FAILED(500, "文件下载失败"),
+    FILE_NOT_SUPPORT_PREVIEW(500, "文件不支持预览");
     
     private final Integer httpStatus; // HTTP状态码作为错误码
     private final String message;    // 错误消息

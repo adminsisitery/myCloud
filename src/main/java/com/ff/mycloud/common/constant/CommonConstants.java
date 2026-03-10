@@ -46,4 +46,5 @@ public class CommonConstants {
         public static final String ANONYMOUS_USER = "anonymous";
         public static final String UNKNOWN_IP = "unknown";
     }
+
 } 

@@ -68,4 +68,13 @@ public class FileInfoMapperServiceImpl
                 .list();
     }
 
+    @Override
+    public FileInfo findByIdAndUserId(Long fileId, Long userId) {
+        return lambdaQuery().eq(FileInfo::getId, fileId)
+                .eq(FileInfo::getUserId,userId)
+                .eq(FileInfo::getIsDeleted, false)
+                .one();
+    }
+
+
 }

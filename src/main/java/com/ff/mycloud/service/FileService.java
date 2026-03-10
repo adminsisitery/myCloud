@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.InputStream;
 import java.util.List;
 
 public interface FileService {
@@ -25,4 +27,7 @@ public interface FileService {
  List<FileListVO> searchFiles(String keyword);
 
  byte[] getFileContent(Long id);
+
+ InputStream getFile(String path);
+
 }

@@ -16,4 +16,7 @@ public interface FileInfoMapperService extends IService<FileInfo> {
     Long countFiles(String sha256Hash);
 
     List<FileInfo> findBykeyWord(String keyword, Long currentUserId);
+
+    FileInfo findByIdAndUserId(Long fileId, Long userId);
+
 }

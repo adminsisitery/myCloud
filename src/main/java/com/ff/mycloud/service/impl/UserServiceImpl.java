@@ -1,15 +1,20 @@
 package com.ff.mycloud.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.ff.mycloud.common.constant.CommonConstants;
+import com.ff.mycloud.common.constant.FileConstant;
 import com.ff.mycloud.common.util.EmailUtil;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.PasswordUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
+import com.ff.mycloud.mapper.UserCenterMapper;
 import com.ff.mycloud.model.dto.LoginDTO;
 import com.ff.mycloud.model.dto.RegisterDTO;
 import com.ff.mycloud.model.entity.User;
+import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.redis.VerificationCodeRedis;
+import com.ff.mycloud.service.UserCenterMapperService;
 import com.ff.mycloud.service.UserMapperService;
 import com.ff.mycloud.service.UserService;
 import jakarta.validation.constraints.Email;
@@ -21,7 +26,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Random;
-
 import static com.ff.mycloud.enums.ErrorCode.*;
 
 /**
@@ -34,13 +38,19 @@ import static com.ff.mycloud.enums.ErrorCode.*;
 @Service
 public class UserServiceImpl implements UserService {
 
+    private final UserMapperServiceImpl userMapperServiceImpl;
     Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
     UserMapperService userMapperService;
     VerificationCodeRedis verificationCodeRedis;
+    UserCenterMapperService userCenterMapperService;
+    UserCenterMapper userCenterMapper;
 
-    public UserServiceImpl(VerificationCodeRedis verificationCodeRedis,UserMapperService userMapperService) {
+    public UserServiceImpl(VerificationCodeRedis verificationCodeRedis,UserCenterMapper userCenterMapper, UserMapperService userMapperService, UserCenterMapperService userCenterMapperService, UserMapperServiceImpl userMapperServiceImpl) {
         this.verificationCodeRedis = verificationCodeRedis;
         this.userMapperService = userMapperService;
+        this.userCenterMapperService = userCenterMapperService;
+        this.userMapperServiceImpl = userMapperServiceImpl;
+        this.userCenterMapper = userCenterMapper;
     }
 
     @Override
@@ -102,6 +112,10 @@ public class UserServiceImpl implements UserService {
         userMapperService.save(user);
         //redis删除验证码
         verificationCodeRedis.deleteVerificationCode(user.getEmail());
+
+        //创建完用户保存信息到userCenter表同时
+        UserCenter userCenter = userCenterMapper.UserToUserCenter(user, FileConstant.BASE_SIZE,FileConstant.MAX_SIZE);
+        userCenterMapperService.save(userCenter);
     }
     @Override
     public void sendVerificationCode(@NotBlank @Email String email) {

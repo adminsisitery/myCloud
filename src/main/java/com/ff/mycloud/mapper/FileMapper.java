@@ -40,7 +40,7 @@ public interface FileMapper {
 
     // 秒传
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "filename", source = "filename")
+    @Mapping(target = "filename", source = "filenames")
     @Mapping(target = "originalFilename", source = "filename")
     @Mapping(target = "path", source = "existingFile.path")
     @Mapping(target = "fileSize", source = "existingFile.fileSize")
@@ -52,7 +52,7 @@ public interface FileMapper {
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "sha256Hash", source = "sha256Hash")
-    FileInfo toFileInfoForFastUpload(String filename, FileInfo existingFile, Long userId, Long parentId, String sha256Hash);
+    FileInfo toFileInfoForFastUpload(String filename,String filenames, FileInfo existingFile, Long userId, Long parentId, String sha256Hash);
 
     // 本地路径上传
     @Mapping(target = "id", ignore = true)

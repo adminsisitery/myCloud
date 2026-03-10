@@ -21,10 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.util.UUID;
 
 /**
@@ -121,6 +118,16 @@ public class OssStorageServiceImpl implements StorageService {
     } finally {
         closeOssClient(ossClient);
     }
+    }
+
+    @Override
+    public InputStream getFile(String path) {
+        checkOssEnabled();
+        OSS ossClient=null;
+        ossClient = getOssClient();
+        OSSObject object = ossClient.getObject(new GetObjectRequest(ossProProperties.getBucketName(), path));
+        InputStream objectContent = object.getObjectContent();
+        return objectContent;
     }
 
     private ProgressListener createProgressListener(String taskId, long size) {

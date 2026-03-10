@@ -37,12 +37,7 @@ public class GlobalExceptionHandler {
                 .body(Result.error(401, "未登录或token无效"));
     }
 
-    // 全局异常处理器里新增：打印请求URL
-    @ExceptionHandler(NoResourceFoundException.class)
-    public Result<Void> handleNoResourceFoundException(NoResourceFoundException e, HttpServletRequest request) {
-        log.error("静态资源找不到！请求URL：{}，错误信息：{}", request.getRequestURL(), e.getMessage());
-        return Result.error(500, "请求的资源不存在");
-    }
+
 
     /**
      * 业务异常
