@@ -16,4 +16,5 @@ public class ShareFileVO {
     private LocalDateTime createTime;
     private Integer visitCount;
     private Boolean isExpired;
+    private Boolean isFolder;
 } 

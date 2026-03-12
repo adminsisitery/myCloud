@@ -15,4 +15,5 @@ public class UploadProgressVO {
     private boolean completed;
     private boolean success;
     private String message;
+
 }

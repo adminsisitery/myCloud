@@ -8,13 +8,20 @@ import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.model.dto.ShareAccessDTO;
 import com.ff.mycloud.model.dto.ShareCreateDTO;
+import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.entity.ShareRecord;
 import com.ff.mycloud.model.vo.ShareFileVO;
+import com.ff.mycloud.service.FileInfoMapperService;
+import com.ff.mycloud.service.FolderService;
+import com.ff.mycloud.service.ShareRecordMapperServic;
+import com.ff.mycloud.service.impl.ShareRecordMapperServicImpl;
 import com.ff.mycloud.service.impl.shareServiceImpl;
 import com.ff.mycloud.service.shareService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jodd.util.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,6 +33,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.net.http.HttpResponse;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -42,10 +51,16 @@ import java.util.List;
 public class ShareController {
 
     shareServiceImpl shareServiceImpl;
+    FileInfoMapperService fileInfoMapperService;
+    ShareRecordMapperServic shareRecordMapperService;
+    FolderService folderService;
 
 
-    public ShareController(com.ff.mycloud.service.impl.shareServiceImpl shareServiceImpl) {
+    public ShareController(com.ff.mycloud.service.impl.shareServiceImpl shareServiceImpl, FileInfoMapperService fileInfoMapperService, ShareRecordMapperServic shareRecordMapperService, FolderService folderService) {
         this.shareServiceImpl = shareServiceImpl;
+        this.fileInfoMapperService = fileInfoMapperService;
+        this.shareRecordMapperService = shareRecordMapperService;
+        this.folderService = folderService;
     }
 
     @PostMapping
@@ -147,19 +162,69 @@ public class ShareController {
     }
 
     @GetMapping("/{shareCode}/content")
-    public ResponseEntity<byte[]> downloadSharedFile(@PathVariable String shareCode) {
+    public ResponseEntity<byte[]> downloadSharedFile(@PathVariable String shareCode, HttpServletResponse response) {
         // 从Cookie中获取令牌
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
                 .getRequest();
         String token = extractShareTokenFromCookies(shareCode, request);
-        byte[] file = shareServiceImpl.downloadSharedFile(shareCode,token);
-        // 设置响应头
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        headers.setContentDispositionFormData("attachment", shareServiceImpl.getFilename(shareCode));
-        headers.setContentLength(file.length);
-        return ResponseEntity.ok()
-                .headers(headers)
-                .body(file);
+
+        FileInfo fileInfoByShare = getFileInfoByShare(shareCode, token);
+        if (fileInfoByShare.getIsFolder()) {
+            //是文件夹
+            folderService.downLoadFolder(fileInfoByShare.getId(),response);
+        } else {
+            byte[] file = shareServiceImpl.downloadSharedFile(shareCode, token);
+            // 设置响应头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", shareServiceImpl.getFilename(shareCode));
+            headers.setContentLength(file.length);
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(file);
+        }
+        return null;
+    }
+    public FileInfo getFileInfoByShare(String shareCode, String token) {
+        // 这里复用你现有的分享验证逻辑
+        // 1. 验证 shareCode 是否存在
+        // 新增：打印关键参数
+        System.out.println("收到 shareCode: " + shareCode);
+        System.out.println("收到 token: " + token);
+
+        // 1. 验证 shareCode 是否存在
+        ShareRecord shareRecord = shareRecordMapperService.findByShareCode(shareCode);
+
+        // 新增：打印查询结果
+        System.out.println("数据库查到的 shareRecord: " + shareRecord);
+        if (shareRecord != null) {
+            System.out.println("shareRecord.isExpired() 字段值: " + shareRecord.getIsExpired());
+            System.out.println("shareRecord.expireTime: " + shareRecord.getExpireTime());
+            System.out.println("当前时间: " + LocalDateTime.now());
+            System.out.println("是否真的过期(逻辑判断): " + shareRecord.getExpireTime().isBefore(LocalDateTime.now()));
+        }
+
+        if (shareRecord == null) {
+            throw new BusinessException(ErrorCode.SHARE_NOT_FOUND);
+        }
+
+        // 2. 验证 token（如果有密码）
+        if (StringUtil.isNotBlank(shareRecord.getPassword())) {
+            // 这里复用你现有的 token 验证逻辑
+            shareServiceImpl.validateShareToken(shareCode, token);
+        }
+
+        // 3. 验证是否过期
+        if (shareRecord.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.SHARE_EXPIRED);
+        }
+
+        // 4. 获取文件信息并验证原文件是否存在
+        FileInfo fileInfo = fileInfoMapperService.getById(shareRecord.getFileId());
+        if (fileInfo == null || fileInfo.getIsDeleted()) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+
+        return fileInfo;
     }
 }

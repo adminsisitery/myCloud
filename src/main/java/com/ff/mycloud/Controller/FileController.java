@@ -3,6 +3,7 @@ package com.ff.mycloud.Controller;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.UploadProgressMapper;
+import com.ff.mycloud.model.dto.CreateFolderDTO;
 import com.ff.mycloud.model.dto.FileRenameDTO;
 import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.model.vo.FileListVO;
@@ -46,18 +47,18 @@ public class FileController {
         this.userCenterMapperService = userCenterMapperService;
         this.userContext = userContext;
     }
-    //上传文件
-    @PostMapping
-    public Result<String> uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "parentId", required = false) Long parentId){
-        String path = fileService.uploadFile(file, parentId);
-        return Result.success(path);
-    }
+//    //上传文件
+//    @PostMapping
+//    public Result<String> uploadFile(
+//            @RequestParam("file") MultipartFile file,
+//            @RequestParam(value = "parentId", required = false,defaultValue = "0") Long parentId){
+//        String path = fileService.uploadFile(file, parentId);
+//        return Result.success(path);
+//    }
 
     //展示文件列表
     @GetMapping
-    public Result<List<FileListVO>> listFiles(@RequestParam(value="parentId",required = false) Long parentId){
+    public Result<List<FileListVO>> listFiles(@RequestParam(value="parentId",required = false,defaultValue = "0") Long parentId){
         List<FileListVO> fileListVOS = fileService.listFiles(parentId);
         return Result.success(fileListVOS);
     }
@@ -66,7 +67,7 @@ public class FileController {
     @PostMapping("/progress")
     public Result<String> uploadWithProgress(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "parentId",required = false) Long parentId
+            @RequestParam(value = "parentId",required = false,defaultValue = "0") Long parentId
     ){
         try {
         //获取文件类型
@@ -158,7 +159,7 @@ public class FileController {
         return Result.success();
     }
 
-
+    //简单文件搜索
     @GetMapping("search")
     public Result<List<FileListVO>> searchFiles(@RequestParam String keyword){
         List<FileListVO> files = fileService.searchFiles(keyword);

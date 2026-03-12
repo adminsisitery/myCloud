@@ -19,4 +19,11 @@ public interface FileInfoMapperService extends IService<FileInfo> {
 
     FileInfo findByIdAndUserId(Long fileId, Long userId);
 
+    Boolean existsFolder(Long parentId, String folderName, Long currentUserId);
+
+    Boolean existsParentId(Long parentId, Long currentUserId);
+
+    void getFileTree(Long fileId);
+
+    public List<FileInfo> getSubTree(String localFilePath, Long userId) ;
 }

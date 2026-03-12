@@ -2,6 +2,7 @@ package com.ff.mycloud.service.impl;
 
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.exceotion.BusinessException;
+import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.FileHashUtil;
 import com.ff.mycloud.common.util.UserContext;
@@ -19,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.InputStream;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -55,6 +57,7 @@ public class FileServiceImpl implements FileService {
     public String uploadFile(MultipartFile file, Long parentId) {
 
         //1.计算文件的hash值
+
         User currentUser = UserContext.getCurrentUser();
         String sha256Hash = FileHashUtil.calculateSHA256(file);
         if (sha256Hash!=null && !sha256Hash.isEmpty()){
@@ -74,10 +77,21 @@ public class FileServiceImpl implements FileService {
             String uploadPath = getUploadPath(parentId, currentUser);
             //上传并得到路径和文件名
             String filePath = storageService.UploadFile(file, uploadPath);
+            String localFilePath="";
+            //计算在文件夹里创建文件的路径
+            if (parentId!=null){
+                //有父级文件夹
+                FileInfo byId = fileInfoMapperService.getById(parentId);
+                if(byId!=null) {
+                    localFilePath = byId.getLocalFilePath() + file.getOriginalFilename();
+                }
+            }
+
             //进行fileInfo对象拼装
-            FileInfo fileInfo = fileMapper.toFileInfo(file, filePath,currentUser.getId(), parentId);
+            FileInfo fileInfo = fileMapper.toFileInfo(file, filePath,currentUser.getId(), parentId,localFilePath);
             //保存到数据库中
 //            return fileInfoRepository.save(fileInfo).getPath();
+            System.out.println("++++++++++++++++++++++++++"+fileInfo.getLocalFilePath());
             fileInfoMapperService.save(fileInfo);
             return fileInfo.getPath();
         }
@@ -91,7 +105,10 @@ public class FileServiceImpl implements FileService {
         List<FileInfo> fileInfos = fileInfoMapperService.findByParentIdAndUserId(currentUserId,parentId);
 
         for (FileInfo fileInfo : fileInfos) {
-            fileInfo.setFilename(fileInfo.getFilename()+"."+fileInfo.getFileSuffix());
+            if (!fileInfo.getIsFolder()) {
+                fileInfo.setFilename(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+            }
+            fileInfo.setFilename(fileInfo.getFilename());
         }
 
         return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
@@ -117,6 +134,17 @@ public class FileServiceImpl implements FileService {
         //存在文件 直接秒传
         if (!byHashAndUserId.isEmpty()){
             FileInfo existingFile = byHashAndUserId.get(0);
+
+            String localFilePath="";
+            if (parentId!=null){
+                FileInfo byId = fileInfoMapperService.getById(parentId);
+                if(byId!=null) {
+                    localFilePath = byId.getLocalFilePath() + originalFilename;
+                }
+            }
+
+            existingFile.setLocalFilePath(localFilePath);
+
             handleFastUpload(originalFilename,size,existingFile,fileHashSHA256,parentId,taskId,currentUser);
             return;
         }
@@ -124,8 +152,6 @@ public class FileServiceImpl implements FileService {
         String uploadPath = getUploadPath(parentId, currentUser);
         StorageService storageService = storageServiceFactory.getStorageService();
         String path = storageService.uploadFileWithProgressFromPath(file, uploadPath, taskId, originalFilename, size);
-
-
 
         //新增保存后缀
         String suffix="";
@@ -136,7 +162,15 @@ public class FileServiceImpl implements FileService {
             fileNameWithoutSuffix = originalFilename.substring(0, i);
         }
 
-        FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename);
+        String localFilePath="";
+        if (parentId!=null){
+            FileInfo byId = fileInfoMapperService.getById(parentId);
+            if(byId!=null) {
+                localFilePath = byId.getLocalFilePath() + originalFilename;
+            }
+        }
+
+        FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
 
         fileInfoMapperService.save(fileInfo);
     }
@@ -175,8 +209,8 @@ public class FileServiceImpl implements FileService {
         fileInfoMapperService.updateById(fileInfo);
     }
 
-    @Override
-    public void deleteFile(Long fileId) {
+
+    public void deleteSimpleFile(Long fileId) {
         FileInfo fileInfo = fileInfoMapperService.getById(fileId);
         //计算具有相同文件的索引个数
         fileInfoMapperService.countFiles(fileInfo.getSha256Hash());
@@ -199,7 +233,196 @@ public class FileServiceImpl implements FileService {
             storageService.deleteFile(fileInfo.getPath());
             log.info("Physically deleted file: {}", fileInfo.getPath());
         }
+    }
+//    @Override
+//    public void deleteFile(Long fileId) {
+//        // 1. 空值校验：防止fileId无效导致NPE
+//        if (fileId == null) {
+//            log.error("删除文件失败：fileId为空");
+//            throw new IllegalArgumentException("文件ID不能为空");
+//        }
+//
+//        // 2. 获取根节点并校验
+//        FileInfo root = fileInfoMapperService.getById(fileId);
+//        if (root == null) {
+//            log.error("删除文件失败：未找到ID为{}的文件/文件夹", fileId);
+//            throw new RuntimeException("文件/文件夹不存在");
+//        }
+//
+//        // 3. 权限校验：确保操作的是当前用户的文件
+//        Long currentUserId = UserContext.getCurrentUserId();
+//        if (!root.getUserId().equals(currentUserId)) {
+//            log.error("删除文件失败：用户{}无权限删除用户{}的文件(ID:{})",
+//                    currentUserId, root.getUserId(), fileId);
+//            throw new RuntimeException("无权限删除该文件/文件夹");
+//        }
+//
+//        // 4. 修复路径匹配：统一处理路径结尾的/，避免双/或无/导致匹配失败
+//        String rootFilePath = root.getLocalFilePath();
+//        // 标准化路径：确保结尾无/，后续拼接统一加/
+//        if (rootFilePath.endsWith("/")) {
+//            rootFilePath = rootFilePath.substring(0, rootFilePath.length() - 1);
+//        }
+//        log.info("开始删除文件/文件夹：ID={}, 路径={}, 用户ID={}", fileId, rootFilePath, currentUserId);
+//
+//        // 5. 获取待删除的所有子节点
+//        List<FileInfo> files = fileInfoMapperService.getSubTree(rootFilePath, currentUserId);
+//        log.info("查询到待删除的文件/文件夹数量：{}", files.size());
+//
+//        long totalSize = 0;
+//
+//        // 6. 批量标记删除 + 统计空间 + 物理删除（按需）
+//        for (FileInfo file : files) {
+//            log.debug("处理文件/文件夹：ID={}, 路径={}, 是否文件夹={}",
+//                    file.getId(), file.getLocalFilePath(), file.getIsFolder());
+//
+//            // 统计文件大小（文件夹不统计）
+//            if (!file.getIsFolder()) {
+//                totalSize += file.getFileSize();
+//            }
+//
+//            // 标记为已删除
+//            file.setIsDeleted(true);
+//            file.setUpdatedAt(LocalDateTime.now());
+//            fileInfoMapperService.updateById(file);
+//
+//            // 秒传引用判断：仅文件需要处理物理删除
+//            if (!file.getIsFolder()) {
+//                // 关键：countFiles需要统计所有状态的引用数，否则会误判
+//                long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
+//                log.debug("文件{}的SHA256引用数：{}", file.getLocalFilePath(), referenceCount);
+//
+//                if (referenceCount <= 1) {
+//                    StorageService storageService = storageServiceFactory.getStorageService();
+//                    // 物理删除文件（增加异常捕获，避免单个文件删除失败导致整体中断）
+//                    try {
+//                        storageService.deleteFile(file.getPath());
+//                        log.info("物理删除文件成功：{}", file.getPath());
+//                    } catch (Exception e) {
+//                        log.error("物理删除文件失败：{}", file.getPath(), e);
+//                        // 可选：抛出异常中断，或记录后继续
+//                        // throw new RuntimeException("物理删除文件失败", e);
+//                    }
+//                }
+//            }
+//        }
+//
+//        // 7. 更新用户空间（校验用户存在）
+//        UserCenter user = userCenterMapperService.getByUserId(currentUserId);
+//        if (user == null) {
+//            log.error("更新用户空间失败：未找到用户{}", currentUserId);
+//            throw new RuntimeException("用户不存在");
+//        }
+//
+//        // 防止空间变为负数
+//        long newUsedSpace = Math.max(0, user.getUsedSpace() - totalSize);
+//        user.setUsedSpace(newUsedSpace);
+//        userCenterMapperService.updateById(user);
+//        log.info("删除完成：共释放空间{}字节，用户{}当前已用空间{}",
+//                totalSize, currentUserId, newUsedSpace);
+//    }
 
+    @Override
+    public void deleteFile(Long fileId) {
+        // 1. 空值校验
+        if (fileId == null) {
+            log.error("删除文件失败：fileId为空");
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+
+        // 2. 获取根节点并校验
+        FileInfo root = fileInfoMapperService.getById(fileId);
+        if (root == null) {
+            log.error("删除文件失败：未找到ID为{}的文件/文件夹", fileId);
+            throw new RuntimeException("文件/文件夹不存在");
+        }
+
+        // 3. 权限校验
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (!root.getUserId().equals(currentUserId)) {
+            log.error("删除文件失败：用户{}无权限删除用户{}的文件(ID:{})",
+                    currentUserId, root.getUserId(), fileId);
+            throw new RuntimeException("无权限删除该文件/文件夹");
+        }
+
+        // 4. 核心分支：先判断是文件还是文件夹
+        List<FileInfo> filesToDelete;
+        if (root.getIsFolder()) {
+            // ========== 分支1：是文件夹 ==========
+            String folderPath = root.getLocalFilePath();
+
+            // 防止空指针（历史脏数据保护）
+            if (folderPath == null || folderPath.isEmpty()) {
+                log.error("删除文件夹失败：路径为空，ID={}", fileId);
+                throw new RuntimeException("文件夹路径异常");
+            }
+
+            // 标准化路径：去掉结尾的 /
+            if (folderPath.endsWith("/")) {
+                folderPath = folderPath.substring(0, folderPath.length() - 1);
+            }
+
+            log.info("开始删除文件夹：ID={}, 路径={}, 用户ID={}", fileId, folderPath, currentUserId);
+
+            // 获取所有子节点（包括文件夹自己）
+            filesToDelete = fileInfoMapperService.getSubTree(folderPath, currentUserId);
+
+        } else {
+            // ========== 分支2：是单文件 ==========
+            log.info("开始删除文件：ID={}, 路径={}, 用户ID={}", fileId, root.getLocalFilePath(), currentUserId);
+
+            // 单文件直接只处理自己，不用查子树
+            filesToDelete = Collections.singletonList(root);
+        }
+
+        log.info("待处理的文件/文件夹总数：{}", filesToDelete.size());
+        long totalSize = 0;
+
+        // 5. 统一处理删除逻辑（文件和文件夹共用）
+        for (FileInfo file : filesToDelete) {
+            log.debug("处理：ID={}, 路径={}, 类型={}",
+                    file.getId(), file.getLocalFilePath(), file.getIsFolder() ? "文件夹" : "文件");
+
+            // 统计文件大小（仅文件统计）
+            if (!file.getIsFolder()) {
+                totalSize += file.getFileSize();
+            }
+
+            // 标记为已删除
+            file.setIsDeleted(true);
+            file.setUpdatedAt(LocalDateTime.now());
+            fileInfoMapperService.updateById(file);
+
+            // 物理删除（仅文件需要，且仅当无引用时）
+            if (!file.getIsFolder()) {
+                long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
+                log.debug("文件{}引用数：{}", file.getLocalFilePath(), referenceCount);
+
+                if (referenceCount <= 1) {
+                    StorageService storageService = storageServiceFactory.getStorageService();
+                    try {
+                        storageService.deleteFile(file.getPath());
+                        log.info("物理删除成功：{}", file.getPath());
+                    } catch (Exception e) {
+                        log.error("物理删除失败：{}", file.getPath(), e);
+                    }
+                }
+            }
+        }
+
+        // 7. 更新用户空间（校验用户存在）
+        UserCenter user = userCenterMapperService.getByUserId(currentUserId);
+        if (user == null) {
+            log.error("更新用户空间失败：未找到用户{}", currentUserId);
+            throw new RuntimeException("用户不存在");
+        }
+
+        // 防止空间变为负数
+        long newUsedSpace = Math.max(0, user.getUsedSpace() - totalSize);
+        user.setUsedSpace(newUsedSpace);
+        userCenterMapperService.updateById(user);
+        log.info("删除完成：共释放空间{}字节，用户{}当前已用空间{}",
+                totalSize, currentUserId, newUsedSpace);
     }
 
     @Override
@@ -244,14 +467,7 @@ public class FileServiceImpl implements FileService {
     private String getUploadPath(Long parentId, User currentUser) {
         //1.如果没有传入父路径的情况
         String path = CommonConstants.File.FILE_PATH_PREFIX + currentUser.getId();
-        if (parentId != null) {
-            //传入了父路径的情况
-            FileInfo parent = fileInfoMapperService.getById(parentId);
-            if (parent == null) {
-                throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
-            }
-            path = parent.getPath();
-        }
+
         return path;
     }
 
@@ -274,5 +490,9 @@ public class FileServiceImpl implements FileService {
 
         return newFileInfo;
     }
+
+
+
+
 
 }

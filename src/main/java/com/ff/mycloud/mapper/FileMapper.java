@@ -33,10 +33,11 @@ public interface FileMapper {
     @Mapping(target = "parentId", source = "parentId")
     @Mapping(target = "isFolder", constant = "false")
     @Mapping(target = "isDeleted", constant = "false")
+    @Mapping(target = "localFilePath",source = "localFilePath")
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "sha256Hash", expression = "java(com.ff.mycloud.common.util.FileHashUtil.calculateSHA256(file))")
-    FileInfo toFileInfo(MultipartFile file, String filePath, Long userId, Long parentId);
+    FileInfo toFileInfo(MultipartFile file, String filePath, Long userId, Long parentId, String localFilePath);
 
     // 秒传
     @Mapping(target = "id", ignore = true)
@@ -65,9 +66,31 @@ public interface FileMapper {
     @Mapping(target = "parentId", source = "parentId")
     @Mapping(target = "isFolder", constant = "false")
     @Mapping(target = "isDeleted", constant = "false")
+    @Mapping(target = "localFilePath",source = "localFilePath")
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "sha256Hash", source = "sha256Hash")
     @Mapping(target = "fileSuffix",source = "suffix")
-    FileInfo toFileInfoFromPath(String filename, String filePath, Long fileSize, Long userId, Long parentId, String sha256Hash, String suffix, String fileType, String originalFilename);
+    FileInfo toFileInfoFromPath(String filename, String filePath, Long fileSize, Long userId, Long parentId, String sha256Hash, String suffix, String fileType, String originalFilename, String localFilePath);
+
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "filename", source = "folderName")
+    @Mapping(target = "originalFilename", source = "folderName")
+    @Mapping(target = "path", constant = "/")
+    @Mapping(target = "fileSize", constant = "0L")
+    @Mapping(target = "fileType", constant = "folder")
+    @Mapping(target = "userId", source = "currentUserId")
+    @Mapping(target = "isFolder", source = "isFolder")
+    @Mapping(target = "isDeleted", source = "isDeleted")
+    @Mapping(target = "localFilePath",source = "localFilePath")
+    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
+    @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
+    FileInfo toFileInfoFromFolder(
+            String folderName,
+            boolean isFolder,
+            boolean isDeleted,
+            Long parentId,
+            Long currentUserId,
+            String localFilePath);
 }

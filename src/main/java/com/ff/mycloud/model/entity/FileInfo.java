@@ -39,6 +39,9 @@ public class FileInfo {
     @TableField("isDeleted")
     private Boolean isDeleted;
 
+    @TableField("local_file_path")
+    private String localFilePath;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

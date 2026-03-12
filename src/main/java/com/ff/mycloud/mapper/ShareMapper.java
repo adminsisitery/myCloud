@@ -10,7 +10,6 @@ import java.time.LocalDateTime;
 @Mapper(componentModel = "spring")
 public interface ShareMapper {
 
-
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "fileId", source = "fileId")
     @Mapping(target = "userId", source = "userId")
@@ -34,14 +33,13 @@ public interface ShareMapper {
     @Mapping(target = "fileId", source = "fileId")
     @Mapping(target = "filename", source = "filename")
     @Mapping(target = "fileSize", source = "fileSize")
-
+    @Mapping(target = "isFolder", source = "isFolder")
     @Mapping(target = "hasPassword",
             expression = "java(shareRecord.getPassword() != null && !shareRecord.getPassword().isEmpty())")
-
     ShareFileVO toShareFileVO(
             ShareRecord shareRecord,
             String filename,
             Long fileSize,
-            Long fileId
-    );
+            Long fileId,
+            Boolean isFolder);
 }

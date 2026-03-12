@@ -1,11 +1,11 @@
 package com.ff.mycloud.service;
 
+import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.vo.FileListVO;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.InputStream;
 import java.util.List;
 
@@ -24,10 +24,10 @@ public interface FileService {
 
     void deleteFile(Long fileId);
 
- List<FileListVO> searchFiles(String keyword);
+    List<FileListVO> searchFiles(String keyword);
 
- byte[] getFileContent(Long id);
+    byte[] getFileContent(Long id);
 
- InputStream getFile(String path);
+    InputStream getFile(String path);
 
 }

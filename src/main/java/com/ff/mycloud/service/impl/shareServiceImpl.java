@@ -1,7 +1,6 @@
 package com.ff.mycloud.service.impl;
 
 import com.ff.mycloud.common.exceotion.BusinessException;
-import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
@@ -93,7 +92,7 @@ public class shareServiceImpl implements shareService {
         //添加到延迟队列redis
         addToDelayedQueue(shareRecord.getId(),expireTime);
 
-        return shareMapper.toShareFileVO(shareRecord,fileInfo.getFilename(),fileInfo.getFileSize(),fileId);
+        return shareMapper.toShareFileVO(shareRecord,fileInfo.getFilename(),fileInfo.getFileSize(),fileId, fileInfo.getIsFolder());
     }
 
     @Override
@@ -107,12 +106,15 @@ public class shareServiceImpl implements shareService {
        return records.stream()
                 .map(r -> {
                     FileInfo file = fileInfoMapperService.getById(r.getFileId());
+                    if (file.getIsFolder()){
+                        return shareMapper.toShareFileVO(r,file.getFilename(),0L,file.getId(),file.getIsFolder());
+                    }
                     return shareMapper.toShareFileVO(
                             r,
                             file.getFilename()+"."+file.getFileSuffix(),
                             file.getFileSize(),
-                            file.getId()
-                    );
+                            file.getId(),
+                            file.getIsFolder());
                 })
                 .toList();
 
@@ -160,7 +162,7 @@ public class shareServiceImpl implements shareService {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
 
-        return shareMapper.toShareFileVO(byShareCode,fileInfo.getFilename()+"."+fileInfo.getFileSuffix(),fileInfo.getFileSize(),fileId);
+        return shareMapper.toShareFileVO(byShareCode,fileInfo.getFilename()+"."+fileInfo.getFileSuffix(),fileInfo.getFileSize(),fileId, fileInfo.getIsFolder());
     }
 
     public ShareFileVO accessShare(String shareCode, String password) {
@@ -189,7 +191,7 @@ public class shareServiceImpl implements shareService {
         // 更新访问次数
         shareRecordMapperService.visitedPlus1(byShareCode.getVisitCount(),byShareCode.getId());
         // 返回分享信息
-        return shareMapper.toShareFileVO(byShareCode,byId.getFilename()+"."+byId.getFileSuffix(),byId.getFileSize(),fileId);
+        return shareMapper.toShareFileVO(byShareCode,byId.getFilename()+"."+byId.getFileSuffix(),byId.getFileSize(),fileId, byId.getIsFolder());
     }
 
     public String generateShareToken(String shareCode, String password) {
