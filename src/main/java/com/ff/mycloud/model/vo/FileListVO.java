@@ -16,4 +16,5 @@ public class FileListVO {
     private Boolean isFolder;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String fileSuffix;
 } 

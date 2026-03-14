@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.mapper.UploadProgressMapper;
 import com.ff.mycloud.model.entity.UploadTask;
@@ -33,6 +34,7 @@ public class UploadProgressController {
 
 
     @GetMapping("/{taskId}")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 10.0, timeout = 500)
     public Result<UploadProgressVO> getUploadProgress(@PathVariable String taskId) {
         UploadTask task = upLoadProgressService.getTask(taskId);
         if (task == null) {

@@ -8,7 +8,7 @@ import java.io.InputStream;
 public interface StorageService {
     String UploadFile(MultipartFile file, String path);
 
-    String uploadFileWithProgressFromPath(File file, String uploadPath, String taskId, String originalFilename, long size);
+    String uploadFileWithProgressFromPath(File file, String uploadPath, String taskId, String originalFilename, long size, String fileType);
 
     byte[] downloadFile(String filePath);
 

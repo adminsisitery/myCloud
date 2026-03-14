@@ -39,5 +39,9 @@ public class shareQueueRedis {
 
         delayedQueue.offer(id, delay, TimeUnit.SECONDS);
     }
-
+    public void removeFromDelayedQueue(Long shareId) {
+        RBlockingQueue<Long> blockingQueue = redissonClient.getBlockingQueue(ShareConstants.Redis.SHARE_QUEUE);
+        RDelayedQueue<Long> delayedQueue = redissonClient.getDelayedQueue(blockingQueue);
+        delayedQueue.remove(shareId);
+    }
 }

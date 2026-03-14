@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+//import com.ff.mycloud.ES.FileSearchRepository;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
@@ -8,9 +9,8 @@ import com.ff.mycloud.common.util.FileHashUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
-import com.ff.mycloud.model.entity.FileInfo;
-import com.ff.mycloud.model.entity.User;
-import com.ff.mycloud.model.entity.UserCenter;
+import com.ff.mycloud.model.entity.*;
+import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 
 /**
- * @description: TODO 
+ * @description: TODO
  * @author 飞飞
  * @date 2026/2/14 13:21
  * @version 1.0
@@ -42,8 +42,19 @@ public class FileServiceImpl implements FileService {
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
     UserCenterMapperService userCenterMapperService;
+//    FileSearchService fileSearchService;
+//    FileSearchRepository searchRepository;
 
-    public FileServiceImpl(StorageServiceFactory storageServiceFactory,UserCenterMapperService userCenterMapperService, FileMapper fileMapper, FileInfoMapperService fileInfoMapperService, UserContext userContext, UserMapperServiceImpl userMapperServiceImpl, UpLoadProgressService upLoadProgressService) {
+    public FileServiceImpl(StorageServiceFactory storageServiceFactory,
+                           UserCenterMapperService userCenterMapperService,
+                           FileMapper fileMapper,
+                           FileInfoMapperService fileInfoMapperService,
+                           UserContext userContext,
+                           UserMapperServiceImpl userMapperServiceImpl,
+                           UpLoadProgressService upLoadProgressService
+//                           ,FileSearchService fileSearchService,
+//                           FileSearchRepository searchRepository
+    ) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
@@ -51,6 +62,8 @@ public class FileServiceImpl implements FileService {
         this.userMapperServiceImpl = userMapperServiceImpl;
         this.upLoadProgressService = upLoadProgressService;
         this.userCenterMapperService = userCenterMapperService;
+//        this.fileSearchService = fileSearchService;
+//        this.searchRepository = searchRepository;
     }
 
     @Override
@@ -91,7 +104,6 @@ public class FileServiceImpl implements FileService {
             FileInfo fileInfo = fileMapper.toFileInfo(file, filePath,currentUser.getId(), parentId,localFilePath);
             //保存到数据库中
 //            return fileInfoRepository.save(fileInfo).getPath();
-            System.out.println("++++++++++++++++++++++++++"+fileInfo.getLocalFilePath());
             fileInfoMapperService.save(fileInfo);
             return fileInfo.getPath();
         }
@@ -151,7 +163,7 @@ public class FileServiceImpl implements FileService {
         //不存在文件正常上传
         String uploadPath = getUploadPath(parentId, currentUser);
         StorageService storageService = storageServiceFactory.getStorageService();
-        String path = storageService.uploadFileWithProgressFromPath(file, uploadPath, taskId, originalFilename, size);
+        String path = storageService.uploadFileWithProgressFromPath(file, uploadPath, taskId, originalFilename, size,fileType);
 
         //新增保存后缀
         String suffix="";
@@ -173,6 +185,13 @@ public class FileServiceImpl implements FileService {
         FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
 
         fileInfoMapperService.save(fileInfo);
+//        //上传完成 同步ES
+//        FileDocument fileDocument = new FileDocument();
+//        fileDocument.setId(fileInfo.getId());
+//        fileDocument.setFileName(fileInfo.getFilename()+ "." + fileInfo.getFileSuffix());
+//        fileDocument.setFileType(fileInfo.getFileType());
+//        fileDocument.setUserId(currentUserId);
+//        searchRepository.save(fileDocument);
     }
 
     @Override
@@ -207,8 +226,13 @@ public class FileServiceImpl implements FileService {
         fileInfo.setFilename(newFilename);
         fileInfo.setUpdatedAt(LocalDateTime.now());
         fileInfoMapperService.updateById(fileInfo);
+//
+//        //直接调用删改名传入id和名字就行
+//        if (!fileInfo.getIsFolder()) {
+//            fileSearchService.renameById(fileId, fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+//        }
+//        fileSearchService.renameById(fileId, newFilename);
     }
-
 
     public void deleteSimpleFile(Long fileId) {
         FileInfo fileInfo = fileInfoMapperService.getById(fileId);
@@ -392,6 +416,8 @@ public class FileServiceImpl implements FileService {
             file.setIsDeleted(true);
             file.setUpdatedAt(LocalDateTime.now());
             fileInfoMapperService.updateById(file);
+//            //直接调用删除 ES删掉就行
+//            fileSearchService.del(fileId);
 
             // 物理删除（仅文件需要，且仅当无引用时）
             if (!file.getIsFolder()) {
@@ -425,10 +451,15 @@ public class FileServiceImpl implements FileService {
                 totalSize, currentUserId, newUsedSpace);
     }
 
+//    @Override
+//    public List<FileListVO> searchFiles(String keyword) {
+//        List<FileInfo> fileInfos = fileSearchService.searchFile(keyword);
+//        return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
+//    }
     @Override
     public List<FileListVO> searchFiles(String keyword) {
-        List<FileInfo> userInfoList = fileInfoMapperService.findBykeyWord(keyword,UserContext.getCurrentUserId());
-        return userInfoList.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
+        List<FileInfo> fileInfos = fileInfoMapperService.findBykeyWord(keyword, UserContext.getCurrentUserId());
+        return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
     @Override
@@ -445,6 +476,7 @@ public class FileServiceImpl implements FileService {
         StorageService storageService = storageServiceFactory.getStorageService();
         return storageService.getFile(path);
     }
+
 
     private byte[] retrieveFileContent(FileInfo andValidateFile) {
         ExceptionUtil.throwIf(andValidateFile.getIsFolder(),ErrorCode.CANNOT_DOWNLOAD_FOLDER);
@@ -487,12 +519,43 @@ public class FileServiceImpl implements FileService {
         // 保存新的文件记录
 //        return fileInfoRepository.save(newFileInfo);
         fileInfoMapperService.save(newFileInfo);
-
+//        //保存到ES
+//        FileDocument fileDocument = new FileDocument();
+//        fileDocument.setId(newFileInfo.getId());
+//        fileDocument.setFileName(newFileInfo.getFilename()+ "." + newFileInfo.getFileSuffix());
+//        fileDocument.setFileType(newFileInfo.getFileType());
+//        fileDocument.setUserId(UserContext.getCurrentUserId());
+//        searchRepository.save(fileDocument);
         return newFileInfo;
     }
 
 
 
+    @Override
+    public Result<FileCheckVO> checkFilesHash(FileCheck fileCheck) {
+        String sha256Hash = fileCheck.getSha256Hash();
+        List<FileInfo> byHashAndUserId = fileInfoMapperService.findByHashAndUserId(sha256Hash, UserContext.getCurrentUserId());
+        if (byHashAndUserId.isEmpty()) {
+            //如果没有就不用秒传
+            FileCheckVO build = FileCheckVO.builder().exists(false).build();
+            return Result.success(build);
+        }
+        //存在就秒传
+        FileCheckVO fvo = FileCheckVO.builder().exists(true).build();
+        //创建新的数据库记录
+        FileInfo fileInfo = byHashAndUserId.get(0);
+        String localFilePath="";
+        String parentId = fileCheck.getParentId();
+        if (parentId!=null){
+            FileInfo byId = fileInfoMapperService.getById(parentId);
+            if(byId!=null) {
+                localFilePath = byId.getLocalFilePath() + fileCheck.getFileName();
+            }
+        }
+        FileInfo fileInfos = fileMapper.toFileInfoFromFileCheck(fileCheck,fileInfo.getPath(),UserContext.getCurrentUserId(), localFilePath,fileInfo.getFileType());
+        fileInfoMapperService.save(fileInfos);
+        return Result.success(fvo);
+    }
 
 
 }

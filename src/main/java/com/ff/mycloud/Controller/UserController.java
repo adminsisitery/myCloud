@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.EmailUtil;
 import com.ff.mycloud.model.dto.EmailSendDTO;
@@ -27,16 +28,19 @@ public class UserController {
     }
 
     @PostMapping("/login")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 5.0, timeout = 1000)
     public Result login(@RequestBody @Valid LoginDTO loginDTO) {
         String token = userService.login(loginDTO);
         return Result.success(token);
     }
     @PostMapping("/register")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
     public Result register(@RequestBody @Valid RegisterDTO registerDTO) {
         userService.register(registerDTO);
         return Result.success();
     }
     @PostMapping("/verification-code")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 1.0, timeout = 1000)
     public Result sendVerificationCode(@RequestBody @Validated EmailSendDTO emailSendDTO) {
         userService.sendVerificationCode(emailSendDTO.getEmail());
         return Result.success();

@@ -1,5 +1,6 @@
 package com.ff.mycloud.mapper;
 
+import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.vo.FileListVO;
 import org.mapstruct.Mapper;
@@ -18,6 +19,7 @@ public interface FileMapper {
     @Mapping(target = "fileType", source = "fileType")
     @Mapping(target = "parentId", source = "parentId")
     @Mapping(target = "isFolder", source = "isFolder")
+    @Mapping(target = "fileSuffix",source = "fileSuffix")
     @Mapping(target = "createdAt", source = "createdAt")
     @Mapping(target = "updatedAt", source = "updatedAt")
     FileListVO toFileListVO(FileInfo fileInfo);
@@ -53,7 +55,7 @@ public interface FileMapper {
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "sha256Hash", source = "sha256Hash")
-    FileInfo toFileInfoForFastUpload(String filename,String filenames, FileInfo existingFile, Long userId, Long parentId, String sha256Hash);
+    FileInfo toFileInfoForFastUpload(String filename, String filenames, FileInfo existingFile, Long userId, Long parentId, String sha256Hash);
 
     // 本地路径上传
     @Mapping(target = "id", ignore = true)
@@ -93,4 +95,19 @@ public interface FileMapper {
             Long parentId,
             Long currentUserId,
             String localFilePath);
+
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "filename", source = "fileCheck.fileName")
+    @Mapping(target = "originalFilename", source = "fileCheck.fileName")
+    @Mapping(target = "path", source = "path")
+    @Mapping(target = "fileSize", source = "fileCheck.fileSize")
+    @Mapping(target = "fileType", source = "fileType")
+    @Mapping(target = "userId", source = "currentUserId")
+    @Mapping(target = "isFolder", constant = "false")
+    @Mapping(target = "isDeleted", constant = "false")
+    @Mapping(target = "localFilePath",source = "localFilePath")
+    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
+    @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
+    FileInfo toFileInfoFromFileCheck(FileCheck fileCheck, String path, Long currentUserId, String localFilePath, String fileType);
 }

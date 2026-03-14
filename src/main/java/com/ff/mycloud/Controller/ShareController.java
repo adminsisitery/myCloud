@@ -1,6 +1,8 @@
 package com.ff.mycloud.Controller;
 
 
+import cn.hutool.core.util.StrUtil;
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.constant.ShareConstants;
 import com.ff.mycloud.common.exceotion.BusinessException;
@@ -64,6 +66,7 @@ public class ShareController {
     }
 
     @PostMapping
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 5.0, timeout = 1000)
     public Result<ShareFileVO> createShareFile(@RequestBody @Validated ShareCreateDTO dto) {
         ShareFileVO share = shareServiceImpl.createShare(
                 dto.getFileId(),
@@ -78,6 +81,7 @@ public class ShareController {
      */
 
     @GetMapping
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 10.0, timeout = 500)
     public Result<List<ShareFileVO>> getShareFiles() {
         List<ShareFileVO> sharedFiles = shareServiceImpl.getSharedFiles();
         return Result.success(sharedFiles);
@@ -92,12 +96,14 @@ public class ShareController {
 //    }
 
     @DeleteMapping("/{shareCode}")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> cancelShare(@PathVariable String shareCode) {
         shareServiceImpl.cancelShare(shareCode);
         return Result.success();
     }
 
     @PostMapping("/{shareCode}")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 10.0, timeout = 1000)
     public Result<ShareFileVO> getShare(@PathVariable String shareCode,
                                         @RequestBody(required = false) @Valid ShareCreateDTO dto) {
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
@@ -117,6 +123,7 @@ public class ShareController {
         return Result.success(shareFileVO);
     }
     @PostMapping("/{shareCode}/verification")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 3.0, timeout = 1000)
     public Result<ShareFileVO> verifyShare(@PathVariable String shareCode, @Valid @RequestBody ShareAccessDTO dto){
         // 验证密码并获取分享信息
         ShareFileVO shareFileVO = shareServiceImpl.accessShare(shareCode, dto.getPassword());
@@ -162,11 +169,14 @@ public class ShareController {
     }
 
     @GetMapping("/{shareCode}/content")
+    @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
     public ResponseEntity<byte[]> downloadSharedFile(@PathVariable String shareCode, HttpServletResponse response) {
         // 从Cookie中获取令牌
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
                 .getRequest();
         String token = extractShareTokenFromCookies(shareCode, request);
+
+
 
         FileInfo fileInfoByShare = getFileInfoByShare(shareCode, token);
         if (fileInfoByShare.getIsFolder()) {

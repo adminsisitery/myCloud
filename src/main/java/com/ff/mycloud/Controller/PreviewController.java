@@ -1,12 +1,16 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.exceotion.BusinessException;
+import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.FileService;
+import com.ff.mycloud.service.impl.OssStorageServiceImpl;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -31,43 +35,59 @@ import java.io.InputStream;
 public class PreviewController {
 
     FileInfoMapperService fileInfoMapperService;
+    OssStorageServiceImpl ossStorageService;
 
     FileService fileService;
 
     public PreviewController(FileInfoMapperService fileInfoMapperService,
-                             FileService fileService) {
+                             FileService fileService,
+                             OssStorageServiceImpl ossStorageService) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileService = fileService;
+        this.ossStorageService = ossStorageService;
     }
 
-    @GetMapping("{fileId}")
-    public ResponseEntity<InputStreamResource> preview(@PathVariable Long fileId) {
-        //根据fileId查数据
+
+    @GetMapping("/{fileId}")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
+    public Result<String> preview(@PathVariable Long fileId, HttpServletRequest request){
+
         FileInfo fileInfo = fileInfoMapperService.findByIdAndUserId(fileId, UserContext.getCurrentUserId());
-        if (fileInfo == null) {
-            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        if(fileInfo == null){
+            throw new BusinessException(ErrorCode.NO_PERMISSION);
         }
-        //从oss得到文件流
-        InputStream file = fileService.getFile(fileInfo.getPath());
-        //切换成spring能给浏览器的
-        InputStreamResource resource = new InputStreamResource(file);
-        String fileSuffix = fileInfo.getFileSuffix();
-        String contentTypeFromFileSuffix = FileTypeUtil.getContentTypeFromFileSuffix(fileSuffix);
-        if (!FileTypeUtil.isPreviewSupported(fileSuffix)) {
-            throw new BusinessException(ErrorCode.FILE_NOT_SUPPORT_PREVIEW);
-        }
-        //设置header
-        HttpHeaders httpHeaders = new HttpHeaders();
-        ContentDisposition contentDisposition = ContentDisposition
-                .inline()
-                .filename(fileInfo.getFilename() + "." + fileSuffix)
-                .build();
-        httpHeaders.setContentDisposition(contentDisposition);
-        httpHeaders.setContentLength(fileInfo.getFileSize());
-        httpHeaders.setContentType(MediaType.valueOf(contentTypeFromFileSuffix));
-        //写文件到Response
-        return ResponseEntity.ok()
-                .headers(httpHeaders)
-                .body(resource);
+        String url = ossStorageService.generatePresignedUrl(fileInfo.getPath(), 300);
+        return Result.success(url);
     }
+
+    //    @GetMapping("{fileId}")
+//    public ResponseEntity<InputStreamResource> preview(@PathVariable Long fileId) {
+//        //根据fileId查数据
+//        FileInfo fileInfo = fileInfoMapperService.findByIdAndUserId(fileId, UserContext.getCurrentUserId());
+//        if (fileInfo == null) {
+//            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+//        }
+//        //从oss得到文件流
+//        InputStream file = fileService.getFile(fileInfo.getPath());
+//        //切换成spring能给浏览器的
+//        InputStreamResource resource = new InputStreamResource(file);
+//        String fileSuffix = fileInfo.getFileSuffix();
+//        String contentTypeFromFileSuffix = FileTypeUtil.getContentTypeFromFileSuffix(fileSuffix);
+//        if (!FileTypeUtil.isPreviewSupported(fileSuffix)) {
+//            throw new BusinessException(ErrorCode.FILE_NOT_SUPPORT_PREVIEW);
+//        }
+//        //设置header
+//        HttpHeaders httpHeaders = new HttpHeaders();
+//        ContentDisposition contentDisposition = ContentDisposition
+//                .inline()
+//                .filename(fileInfo.getFilename() + "." + fileSuffix)
+//                .build();
+//        httpHeaders.setContentDisposition(contentDisposition);
+//        httpHeaders.setContentLength(fileInfo.getFileSize());
+//        httpHeaders.setContentType(MediaType.valueOf(contentTypeFromFileSuffix));
+//        //写文件到Response
+//        return ResponseEntity.ok()
+//                .headers(httpHeaders)
+//                .body(resource);
+//    }
 }

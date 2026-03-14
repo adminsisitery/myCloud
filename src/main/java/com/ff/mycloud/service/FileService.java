@@ -1,6 +1,8 @@
 package com.ff.mycloud.service;
 
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.model.entity.FileCheck;
+import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -30,4 +32,5 @@ public interface FileService {
 
     InputStream getFile(String path);
 
+    Result<FileCheckVO> checkFilesHash(FileCheck fileCheck);
 }

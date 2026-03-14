@@ -26,4 +26,6 @@ public interface FileInfoMapperService extends IService<FileInfo> {
     void getFileTree(Long fileId);
 
     public List<FileInfo> getSubTree(String localFilePath, Long userId) ;
+
+    List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId);
 }

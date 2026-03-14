@@ -31,6 +31,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NotLoginException.class)
     public ResponseEntity<Result<Void>> handleNotLoginException(NotLoginException e) {
+        logger.error("Sa-Token未登录异常：{}，异常类型：{}", e.getMessage(), e.getType());
         logger.error("Authentication error: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)

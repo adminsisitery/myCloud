@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.UserCenterMapper;
@@ -34,11 +35,13 @@ public class UserCenterController {
     }
 
     @GetMapping("/info")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 10.0, timeout = 500)
     public Result<UserCenter> info() {
         UserCenter userCenter = userCenterService.getUserCenterInfo();
         return Result.success(userCenter);
     }
     @PostMapping("/change-password")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 2.0, timeout = 500)
     public Result<String> changePassword(@RequestBody ChangePasswordDTO changePasswordDTO) {
         return userCenterService.changePassword(changePasswordDTO.getOldPassword(), changePasswordDTO.getNewPassword());
     }

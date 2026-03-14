@@ -19,8 +19,8 @@ import java.time.LocalDateTime;
 @TableName("user_center")
 public class UserCenter {
     @TableId
-    private int id;
-    private int userId;
+    private long id;
+    private long userId;
     private String username;
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDateTime createTime;

@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.dto.CreateFolderDTO;
 import com.ff.mycloud.service.FileService;
@@ -28,12 +29,15 @@ public class FolderController {
 
     //新建文件夹
     @PostMapping("/folder")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 1.0, timeout = 1000)
     public Result<String> makeFolder(@RequestBody CreateFolderDTO dto) {
+
         return  folderService.createFolder(dto.getParentId(),dto.getFolderName());
     }
 
     //下载文件夹
     @GetMapping("/{fileId}/content")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
     public ResponseEntity<byte[]> downloadFile(@PathVariable long fileId, HttpServletResponse response) {
         folderService.downLoadFolder(fileId,response);
         return null;

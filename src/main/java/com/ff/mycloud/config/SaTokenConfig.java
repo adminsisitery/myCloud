@@ -23,9 +23,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
                         "/api/user/register",
                             "/api/user/verification-code",
                         // 分享相关
-                        "/api/shares/*",
+                        "/api/shares/**",
                         "/api/shares/*/verification",
-                        "/api/shares/*/content"
+                        "/api/shares/*/content",
+                        "/api/auth/github/**"
 
                     )
                     .check(r -> StpUtil.checkLogin());

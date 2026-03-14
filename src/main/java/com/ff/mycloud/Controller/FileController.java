@@ -1,11 +1,15 @@
 package com.ff.mycloud.Controller;
 
+//import com.ff.mycloud.ES.FileSearchRepository;
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.UploadProgressMapper;
 import com.ff.mycloud.model.dto.CreateFolderDTO;
 import com.ff.mycloud.model.dto.FileRenameDTO;
+import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.entity.UserCenter;
+import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.UpLoadProgressService;
@@ -35,17 +39,21 @@ import java.util.UUID;
 @RequestMapping("/api/files")
 public class FileController {
     private final UserContext userContext;
+//    private final FileSearchRepository fileSearchRepository;
     FileService fileService;
     UpLoadProgressService upLoadProgressService;
     UploadProgressMapper uploadProgressMapper;
     UserCenterMapperService userCenterMapperService;
 
-    public FileController(FileService fileService, UserCenterMapperService userCenterMapperService, UpLoadProgressService upLoadProgressService , UploadProgressMapper uploadProgressMapper, UserContext userContext) {
+    public FileController(FileService fileService, UserCenterMapperService userCenterMapperService, UpLoadProgressService upLoadProgressService , UploadProgressMapper uploadProgressMapper, UserContext userContext
+//            , FileSearchRepository fileSearchRepository
+           ) {
         this.fileService = fileService;
         this.upLoadProgressService = upLoadProgressService;
         this.uploadProgressMapper = uploadProgressMapper;
         this.userCenterMapperService = userCenterMapperService;
         this.userContext = userContext;
+//        this.fileSearchRepository = fileSearchRepository;
     }
 //    //上传文件
 //    @PostMapping
@@ -58,6 +66,7 @@ public class FileController {
 
     //展示文件列表
     @GetMapping
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 10.0, timeout = 500)
     public Result<List<FileListVO>> listFiles(@RequestParam(value="parentId",required = false,defaultValue = "0") Long parentId){
         List<FileListVO> fileListVOS = fileService.listFiles(parentId);
         return Result.success(fileListVOS);
@@ -65,6 +74,7 @@ public class FileController {
 
     //上传文件 任务追踪上传
     @PostMapping("/progress")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
     public Result<String> uploadWithProgress(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "parentId",required = false,defaultValue = "0") Long parentId
@@ -130,8 +140,11 @@ public class FileController {
         }
     }
 
+
+
     //下载文件
     @GetMapping("/{fileId}/content")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
     public ResponseEntity<byte[]> downloadFile(@PathVariable long fileId){
         byte[] content = fileService.downloadFile(fileId);
         HttpHeaders http = new HttpHeaders();
@@ -147,6 +160,7 @@ public class FileController {
 
     //    改名文件
     @PatchMapping("/{fileId}/name")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> renameFile(@PathVariable Long fileId, @Valid @RequestBody FileRenameDTO dto) {
         fileService.renameFile(fileId, dto.getNewFilename());
         return Result.success();
@@ -154,15 +168,26 @@ public class FileController {
 
     //删除文件
     @DeleteMapping("/{fileId}")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> deleteFile(@PathVariable Long fileId) {
         fileService.deleteFile(fileId);
         return Result.success();
     }
 
     //简单文件搜索
-    @GetMapping("search")
+    @GetMapping("/search")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 5.0, timeout = 1000)
     public Result<List<FileListVO>> searchFiles(@RequestParam String keyword){
         List<FileListVO> files = fileService.searchFiles(keyword);
         return Result.success(files);
     }
+
+    //文件秒传判断
+    @PostMapping("/check")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
+    public Result<FileCheckVO> checkFiles(@RequestParam FileCheck fileCheck) {
+        return fileService.checkFilesHash(fileCheck);
+    }
+
+
 }

@@ -41,6 +41,7 @@ public class shareServiceImpl implements shareService {
     ShareTokenRedis shareTokenRedis;
     FileService fileService;
 
+
     public shareServiceImpl(FileInfoMapperService fileInfoMapperService,
                             ShareMapper shareMapper,
                             ShareRecordMapperServic shareRecordMapperService,
@@ -62,8 +63,17 @@ public class shareServiceImpl implements shareService {
     public void cancelShare(String shareCode) {
         Long currentUserId = UserContext.getCurrentUserId();
         ShareRecord byUserIdAndShareCode = shareRecordMapperService.findByUserIdAndShareCode(currentUserId, shareCode);
+        if (byUserIdAndShareCode==null){
+            throw new BusinessException(ErrorCode.SHARE_NOT_FOUND);
+        }
         Long id = byUserIdAndShareCode.getId();
+
+        shareQueueRedis.removeFromDelayedQueue(id);
+
         shareRecordMapperService.removeById(id);
+
+        // 删除token
+        shareTokenRedis.deleteToken(shareCode);
     }
 
     @Override

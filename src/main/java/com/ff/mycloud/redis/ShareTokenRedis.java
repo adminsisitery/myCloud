@@ -48,4 +48,12 @@ public class ShareTokenRedis {
         getBucket(shareCode).set(token, Duration.ofSeconds(ShareConstants.Token.EXPIRE_TIME));
         return token;
     }
+
+    /**
+     * 删除分享令牌
+     * @param shareCode 分享码
+     */
+    public void deleteToken(String shareCode) {
+        getBucket(shareCode).delete();
+    }
 }

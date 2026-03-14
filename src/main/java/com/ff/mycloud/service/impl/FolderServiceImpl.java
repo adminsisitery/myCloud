@@ -11,6 +11,7 @@ import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.service.FileInfoMapperService;
+import com.ff.mycloud.service.FileSearchService;
 import com.ff.mycloud.service.FolderService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -44,11 +45,16 @@ public class FolderServiceImpl implements FolderService {
     FileInfoMapperService fileInfoMapperService;
     FileMapper fileMapper;
     OssStorageServiceImpl ossStorageServiceImpl;
+    FileSearchService fileSearchService;
 
-    public FolderServiceImpl(FileInfoMapperService fileInfoMapperService, FileMapper fileMapper, OssStorageServiceImpl ossStorageServiceImpl) {
+    public FolderServiceImpl(FileInfoMapperService fileInfoMapperService,
+                             FileMapper fileMapper,
+                             OssStorageServiceImpl ossStorageServiceImpl,
+                             FileSearchService fileSearchService) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
         this.ossStorageServiceImpl = ossStorageServiceImpl;
+        this.fileSearchService = fileSearchService;
     }
 
     @Override
@@ -89,6 +95,8 @@ public class FolderServiceImpl implements FolderService {
         //创建文件夹
         FileInfo fileInfoFromFolder = fileMapper.toFileInfoFromFolder(folderName, true, false, parentId, currentUserId,localFilePath);
         fileInfoMapperService.save(fileInfoFromFolder);
+//        //在ES里创建文件夹
+//        fileSearchService.save(fileInfoFromFolder.getId(),fileInfoFromFolder.getFilename(),UserContext.getCurrentUserId());
         return Result.success("创建成功");
     }
 
@@ -96,17 +104,7 @@ public class FolderServiceImpl implements FolderService {
     public void downLoadFolder(long fileId, HttpServletResponse response) {
         //检验fileId 用户 文件夹 是否删除
         FileInfo fileInfo = fileInfoMapperService.getById(fileId);
-        if (fileInfo==null||fileInfo.getIsDeleted()){
-            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
-        }
-        if (!fileInfo.getIsFolder()){
-            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
-        }
         Long currentUserId = UserContext.getCurrentUserId();
-        if (!currentUserId.equals(fileInfo.getUserId())){
-            throw new BusinessException(ErrorCode.NO_PERMISSION);
-        }
-
         String localFilePath = fileInfo.getLocalFilePath();
         //路径标准化
         if(localFilePath.endsWith("/")){
