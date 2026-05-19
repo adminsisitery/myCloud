@@ -9,4 +9,14 @@ public interface UserService {
     String login(LoginDTO loginDTO);
     void register(RegisterDTO registerDTO);
     void sendVerificationCode(@NotBlank @Email String email);
+
+    /**
+     * 用户登出
+     */
+    void logout();
+
+    /**
+     * 强制下线指定用户
+     */
+    void forceLogout(Long userId);
 }

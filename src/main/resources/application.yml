@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: cloud-drive
+  elasticsearch:
+    uris: http://localhost:9200
+    username: elastic
+    password: 123456
 
   # 数据库配置
   datasource:
@@ -73,6 +77,7 @@ sa-token:
   # 使用 Redis Jackson DAO 存储 Sa-Token 数据
   dao: redisJackson
 
+
 # OSS配置
 oss:
   enabled: true
@@ -80,3 +85,8 @@ oss:
   access-key-secret: REDACTED_SECRET
   endpoint: oss-cn-hangzhou.aliyuncs.com
   bucket-name: feifeioss
+oauth:
+  github:
+    client-id:  Ov23liWWn2l1Q6nj4gHM # 必须填，不能空
+    client-secret: 7ac36eaf827915df6e5bb4d9218e30e045759fe1  # 必须填，不能空
+    redirect-uri: http://localhost:8080/api/auth/github/callback  # 必须和GitHub应用配置的回调地址一致

@@ -45,4 +45,22 @@ public class UserController {
         userService.sendVerificationCode(emailSendDTO.getEmail());
         return Result.success();
     }
+    /**
+     * 强制登出
+     */
+    @PostMapping("/forceLogout/{userId}")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 2.0, timeout = 500)
+    public Result<Void> forceLogout(@PathVariable Long userId) {
+        userService.forceLogout(userId);
+        return Result.success();
+    }
+    /**
+     * 登出
+     */
+    @PostMapping("/logout")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> logout() {
+        userService.logout();
+        return Result.success();
+    }
 }

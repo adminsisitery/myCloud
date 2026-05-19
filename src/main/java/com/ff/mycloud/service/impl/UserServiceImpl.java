@@ -139,4 +139,15 @@ public class UserServiceImpl implements UserService {
         //保存到redis
         verificationCodeRedis.saveVerificationCode(email, code);
     }
+    @Override
+    public void logout() {
+        ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN);
+        StpUtil.logout();
+    }
+    @Override
+    public void forceLogout(Long userId) {
+        ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN, "操作者未登录");
+        // 强制指定用户下线
+        StpUtil.logout(userId);
+    }
 }

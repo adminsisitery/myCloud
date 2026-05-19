@@ -263,5 +263,34 @@ public class shareServiceImpl implements shareService {
                 .set(ShareRecord::getIsExpired, true)
                 .update();
     }
+    /**
+     * 单条标记指定ID的分享为失效（延迟队列消费者用）
+     * @param shareId 分享记录ID
+     * @return 是否更新成功（true=成功，false=失败/无匹配记录）
+     */
+    public boolean markShareExpired(Long shareId) {
+        try {
+            // 执行单条精准更新：仅更新指定ID、未过期、且已到过期时间的分享
+            return shareRecordMapperService.lambdaUpdate()
+                    // 核心：仅处理传入的这个分享ID
+                    .eq(ShareRecord::getId, shareId)
+                    // 条件1：过期时间早于当前时间
+                    .lt(ShareRecord::getExpireTime, LocalDateTime.now())
+                    // 条件2：未标记为过期
+                    .eq(ShareRecord::getIsExpired, false)
+                    // 更新：标记为已过期
+                    .set(ShareRecord::getIsExpired, true)
+                    .update();
+
+            // updateCount > 0 说明有记录被更新，返回成功
+
+        } catch (Exception e) {
+            // 记录异常日志，方便排查问题
+            log.error("标记分享ID: {} 过期失败", shareId, e);
+            // 异常时返回失败
+            return false;
+        }
+    }
+
 }
 
