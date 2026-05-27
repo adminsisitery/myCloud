@@ -9,5 +9,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class MyCloudApplication {
     public static void main(String[] args) {
         SpringApplication.run(MyCloudApplication.class, args);
+        finishInfoPrint();
+    }
+    private static void finishInfoPrint() {
+        System.out.println();
+        System.out.println("-----------------------------------");
+        System.out.println("网盘后端启动完成!!");
+        System.out.println("-----------------------------------");
     }
 }
