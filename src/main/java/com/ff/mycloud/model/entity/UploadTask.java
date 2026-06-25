@@ -1,7 +1,7 @@
 package com.ff.mycloud.model.entity;
 
+import com.ff.mycloud.enums.UploadTaskStatus;
 import lombok.Data;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -27,6 +27,8 @@ public class UploadTask implements Serializable {
     private boolean success;
     private String message;
     private final long createdAt;
+    private UploadTaskStatus status;
+    private boolean spaceReleased;
 
     public UploadTask(String id, String filename, long totalSize) {
         this.id = id;
@@ -38,5 +40,7 @@ public class UploadTask implements Serializable {
         this.success = false;
         this.message = "";
         this.createdAt = System.currentTimeMillis();
+        this.status = UploadTaskStatus.PENDING;
+        this.spaceReleased = false;
     }
 }

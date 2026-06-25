@@ -132,6 +132,7 @@ public class UserServiceImpl implements UserService {
 
         //发送验证码
         boolean success = EmailUtil.sendVerificationCode(email, code);
+        System.out.println(code);
         if (!success) {
             ExceptionUtil.throwBizException(ErrorCode.EMAIL_SEND_ERROR);
         }

@@ -1,5 +1,6 @@
 package com.ff.mycloud.model.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -18,7 +19,7 @@ import java.time.LocalDateTime;
 @Data
 @TableName("user_center")
 public class UserCenter {
-    @TableId
+    @TableId(type = IdType.AUTO)
     private long id;
     private long userId;
     private String username;

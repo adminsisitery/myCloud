@@ -156,7 +156,11 @@ public class OssStorageServiceImpl implements StorageService {
            private long totalBytesTransferred = 0;
            @Override
             public void progressChanged(ProgressEvent progressEvent) {
-                //创建监听
+                // 看任务是否被取消
+               if (upLoadProgressService.isCancelled(taskId)) {
+                   throw new RuntimeException("上传已取消");
+               }
+               //创建监听
                 long bytes = progressEvent.getBytes();
                 ProgressEventType eventType = progressEvent.getEventType();
                 switch (eventType) {
@@ -170,13 +174,14 @@ public class OssStorageServiceImpl implements StorageService {
                         upLoadProgressService.updateBytesTransferred(taskId,totalBytesTransferred);
                         break;
                     case TRANSFER_COMPLETED_EVENT:
-                        //完成状态
-                        upLoadProgressService.completeUploadTask(taskId,true,"上传完成");
+                        // SUCCESS is set after the file metadata is persisted.
                         break;
                     case TRANSFER_FAILED_EVENT:
                         //失败状态
                         upLoadProgressService.completeUploadTask(taskId,false,"上传失败");
                         break;
+                    case TRANSFER_CANCELED_EVENT:
+                        upLoadProgressService.cancelUploadTask(taskId,"文件取消");
                 }
             }
         };

@@ -6,13 +6,6 @@ import com.ff.mycloud.repositorys.UserCenterMapper;
 import com.ff.mycloud.service.UserCenterMapperService;
 import org.springframework.stereotype.Service;
 
-/**
- * @description: TODO 
- * @author 飞飞
- * @date 2026/3/7 17:08
- * @version 1.0
- */
-
 @Service
 public class UserCenterMapperServiceImpl extends ServiceImpl<UserCenterMapper, UserCenter> implements UserCenterMapperService {
 
@@ -21,5 +14,15 @@ public class UserCenterMapperServiceImpl extends ServiceImpl<UserCenterMapper, U
         return lambdaQuery()
                 .eq(UserCenter::getUserId, currentUserId)
                 .one();
+    }
+
+    @Override
+    public void releaseSpace(Long currentUserId, long size) {
+        baseMapper.releaseSpace(currentUserId, size);
+    }
+
+    @Override
+    public boolean reserveSpace(long userId, long fileSize) {
+        return baseMapper.reserveSpace(userId, fileSize) > 0;
     }
 }

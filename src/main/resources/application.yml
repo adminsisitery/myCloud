@@ -8,6 +8,13 @@ spring:
     uris: http://localhost:9200
     username: elastic
     password: 123456
+  rabbitmq:
+    host: 47.95.192.221
+    port: 5672
+    username: mycloud
+    password: 2005525a
+    virtual-host: feicloud
+
 
   # 数据库配置
   datasource:
@@ -90,3 +97,6 @@ oauth:
     client-id:  Ov23liWWn2l1Q6nj4gHM # 必须填，不能空
     client-secret: 7ac36eaf827915df6e5bb4d9218e30e045759fe1  # 必须填，不能空
     redirect-uri: http://localhost:8080/api/auth/github/callback  # 必须和GitHub应用配置的回调地址一致
+
+
+

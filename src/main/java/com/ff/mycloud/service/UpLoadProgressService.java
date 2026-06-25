@@ -1,71 +1,116 @@
 package com.ff.mycloud.service;
 
+import com.ff.mycloud.enums.UploadTaskStatus;
 import com.ff.mycloud.model.entity.UploadTask;
 import com.ff.mycloud.redis.UploadProgressRedis;
 import org.springframework.stereotype.Service;
 
-/**
- * @description: TODO 
- * @author 飞飞
- * @date 2026/3/3 13:54
- * @version 1.0
- */
-
 @Service
 public class UpLoadProgressService {
 
-    UploadProgressRedis uploadProgressRedis;
+    private final UploadProgressRedis uploadProgressRedis;
 
     public UpLoadProgressService(UploadProgressRedis uploadProgressRedis) {
         this.uploadProgressRedis = uploadProgressRedis;
     }
 
-    public void createUploadTask(String taskId, String originalFilename, long size){
-        UploadTask uploadTask = new UploadTask(taskId, originalFilename, size);
-        uploadProgressRedis.createTask(uploadTask);
-    }
-    //设置初始进度为0
-    public void updateProgress(String taskId, long i, long size) {
-        UploadTask task = uploadProgressRedis.getTask(taskId);
-        if (task != null) {
-            task.setBytesTransferred(i);
-            task.setTotalSize(size);
-            if (size > 0){
-                double percentage = (double)task.getBytesTransferred() / size * 100;
-                task.setProgress(Math.min(100,percentage));
-            }
-            uploadProgressRedis.saveTask(task);
-        }
+    public void createUploadTask(String taskId, String originalFilename, long size) {
+        uploadProgressRedis.createTask(new UploadTask(taskId, originalFilename, size));
     }
 
-    //累加更新新的传输进度
-    public void updateBytesTransferred(String taskId, long addBytesTransferred) {
-        UploadTask task = uploadProgressRedis.getTask(taskId);
-        if (task != null) {
-            //计算累加的
-            long bytesTransferred = addBytesTransferred;
-            task.setBytesTransferred(bytesTransferred);
-            if (task.getTotalSize() > 0){
-                double per = (double)bytesTransferred / task.getTotalSize() * 100;
-                task.setProgress(Math.min(100,per));
+    public void markUploading(String taskId) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            if (task.getStatus() == UploadTaskStatus.PENDING) {
+                task.setStatus(UploadTaskStatus.UPLOADING);
             }
-            uploadProgressRedis.saveTask(task);
-        }
+            return null;
+        });
+    }
+
+    public void updateProgress(String taskId, long bytesTransferred, long totalSize) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            if (isTerminal(task.getStatus())) {
+                return null;
+            }
+            task.setStatus(UploadTaskStatus.UPLOADING);
+            task.setBytesTransferred(bytesTransferred);
+            task.setTotalSize(totalSize);
+            if (totalSize > 0) {
+                double percentage = (double) bytesTransferred / totalSize * 100;
+                task.setProgress(Math.min(100, percentage));
+            }
+            return null;
+        });
+    }
+
+    public void updateBytesTransferred(String taskId, long bytesTransferred) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            if (isTerminal(task.getStatus())) {
+                return null;
+            }
+            task.setStatus(UploadTaskStatus.UPLOADING);
+            task.setBytesTransferred(bytesTransferred);
+            if (task.getTotalSize() > 0) {
+                double percentage = (double) bytesTransferred / task.getTotalSize() * 100;
+                task.setProgress(Math.min(100, percentage));
+            }
+            return null;
+        });
     }
 
     public void completeUploadTask(String taskId, boolean success, String message) {
-        UploadTask task = uploadProgressRedis.getTask(taskId);
-        if (task != null) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            if (isTerminal(task.getStatus())) {
+                return null;
+            }
             task.setSuccess(success);
             task.setCompleted(true);
             task.setMessage(message);
-            task.setProgress(100);
-            uploadProgressRedis.saveTask(task);
-        }
+            task.setStatus(success ? UploadTaskStatus.SUCCESS : UploadTaskStatus.FAILED);
+            if (success) {
+                task.setBytesTransferred(task.getTotalSize());
+                task.setProgress(100);
+            }
+            return null;
+        });
+    }
 
+    public void cancelUploadTask(String taskId, String message) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            if (isTerminal(task.getStatus())) {
+                return null;
+            }
+            task.setStatus(UploadTaskStatus.CANCELLED);
+            task.setCompleted(true);
+            task.setSuccess(false);
+            task.setMessage(message);
+            return null;
+        });
+    }
+
+    public boolean isCancelled(String taskId) {
+        UploadTask task = uploadProgressRedis.getTask(taskId);
+        return task != null && task.getStatus() == UploadTaskStatus.CANCELLED;
+    }
+
+    public boolean tryMarkSpaceReleased(String taskId) {
+        Boolean marked = uploadProgressRedis.updateTask(taskId, task -> {
+            if (task.isSpaceReleased()) {
+                return false;
+            }
+            task.setSpaceReleased(true);
+            return true;
+        });
+        return Boolean.TRUE.equals(marked);
     }
 
     public UploadTask getTask(String taskId) {
         return uploadProgressRedis.getTask(taskId);
+    }
+
+    private boolean isTerminal(UploadTaskStatus status) {
+        return status == UploadTaskStatus.SUCCESS
+                || status == UploadTaskStatus.FAILED
+                || status == UploadTaskStatus.CANCELLED;
     }
 }

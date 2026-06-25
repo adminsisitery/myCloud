@@ -24,6 +24,7 @@ public interface UploadProgressMapper {
     @Mapping(target = "progress", source = "progress")
     @Mapping(target = "completed", source = "completed")
     @Mapping(target = "success", source = "success")
+    @Mapping(target = "status", source = "status")
     @Mapping(target = "message", source = "message")
     UploadProgressVO toUploadProgressVO(UploadTask task) ;
 }

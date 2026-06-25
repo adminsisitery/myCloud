@@ -8,12 +8,15 @@ import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.FileHashUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
+import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.*;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
+import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuate.health.HttpCodeStatusMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,6 +41,8 @@ public class FileServiceImpl implements FileService {
     private final UserContext userContext;
     private final UserMapperServiceImpl userMapperServiceImpl;
     private final UpLoadProgressService upLoadProgressService;
+    private final FileObjectMapper fileObjectMapper;
+    private final HttpCodeStatusMapper healthHttpCodeStatusMapper;
     StorageServiceFactory storageServiceFactory;
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
@@ -51,10 +56,10 @@ public class FileServiceImpl implements FileService {
                            FileInfoMapperService fileInfoMapperService,
                            UserContext userContext,
                            UserMapperServiceImpl userMapperServiceImpl,
-                           UpLoadProgressService upLoadProgressService
+                           UpLoadProgressService upLoadProgressService,
 //                           ,FileSearchService fileSearchService,
 //                           FileSearchRepository searchRepository
-    ) {
+                           FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
@@ -64,6 +69,8 @@ public class FileServiceImpl implements FileService {
         this.userCenterMapperService = userCenterMapperService;
 //        this.fileSearchService = fileSearchService;
 //        this.searchRepository = searchRepository;
+        this.fileObjectMapper = fileObjectMapper;
+        this.healthHttpCodeStatusMapper = healthHttpCodeStatusMapper;
     }
 
     @Override
@@ -136,12 +143,13 @@ public class FileServiceImpl implements FileService {
         //检查是不是文件并存在
         if (!file.exists()||!file.isFile()){
             log.info("文件不存在或不是常规文件");
-//            uploadProgressService.completeUploadTask(taskId, false, "文件不存在或不是常规文件");
+        //     uploadProgressService.completeUploadTask(taskId, false, "文件不存在或不是常规文件");
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
         //计算文件的SHA-256
         String fileHashSHA256 = FileHashUtil.calculateSHA256(file);
         //查看数据库里是否有文件 是否上传过
+        //秒传只允许复用“当前用户已经拥有过的文件”。
         List<FileInfo> byHashAndUserId = fileInfoMapperService.findByHashAndUserId(fileHashSHA256, currentUserId);
         //存在文件 直接秒传
         if (!byHashAndUserId.isEmpty()){
@@ -183,8 +191,12 @@ public class FileServiceImpl implements FileService {
         }
 
         FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
-
+        FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
         fileInfoMapperService.save(fileInfo);
+        fileObjectMapper.createFileObject(fileObject);//上传完成保存保存object表
+        // todo 上传完成保存文件的分片hash信息
+
+        createSample(file,fileObject);
 //        //上传完成 同步ES
 //        FileDocument fileDocument = new FileDocument();
 //        fileDocument.setId(fileInfo.getId());
@@ -192,6 +204,10 @@ public class FileServiceImpl implements FileService {
 //        fileDocument.setFileType(fileInfo.getFileType());
 //        fileDocument.setUserId(currentUserId);
 //        searchRepository.save(fileDocument);
+    }
+
+    private void createSample(File file, FileObject fileObject) {
+        
     }
 
     @Override
@@ -435,7 +451,7 @@ public class FileServiceImpl implements FileService {
                 }
             }
         }
-
+        // todo 更新用户空间增加mq过渡
         // 7. 更新用户空间（校验用户存在）
         UserCenter user = userCenterMapperService.getByUserId(currentUserId);
         if (user == null) {
@@ -513,7 +529,6 @@ public class FileServiceImpl implements FileService {
         if (taskId != null) {
             // 模拟上传进度（秒传情况下直接完成）
             upLoadProgressService.updateProgress(taskId, fileSize, fileSize);
-            upLoadProgressService.completeUploadTask(taskId, true, "文件秒传成功");
         }
 
         // 保存新的文件记录
@@ -529,7 +544,11 @@ public class FileServiceImpl implements FileService {
         return newFileInfo;
     }
 
-
+    /**
+     * 文件秒传操作
+     * @param fileCheck
+     * @return
+     */
 
     @Override
     public Result<FileCheckVO> checkFilesHash(FileCheck fileCheck) {
@@ -542,18 +561,20 @@ public class FileServiceImpl implements FileService {
         }
         //存在就秒传
         FileCheckVO fvo = FileCheckVO.builder().exists(true).build();
+        //todo :文件秒传设置用户已用容量 -> 文件预站 -> 文件失败 -> 释放空间
+
         //创建新的数据库记录
-        FileInfo fileInfo = byHashAndUserId.get(0);
-        String localFilePath="";
-        String parentId = fileCheck.getParentId();
-        if (parentId!=null){
-            FileInfo byId = fileInfoMapperService.getById(parentId);
-            if(byId!=null) {
-                localFilePath = byId.getLocalFilePath() + fileCheck.getFileName();
-            }
-        }
-        FileInfo fileInfos = fileMapper.toFileInfoFromFileCheck(fileCheck,fileInfo.getPath(),UserContext.getCurrentUserId(), localFilePath,fileInfo.getFileType());
-        fileInfoMapperService.save(fileInfos);
+//        FileInfo fileInfo = byHashAndUserId.get(0);
+//        String localFilePath="";
+//        String parentId = fileCheck.getParentId();
+//        if (parentId!=null){
+//            FileInfo byId = fileInfoMapperService.getById(parentId);
+//            if(byId!=null) {
+//                localFilePath = byId.getLocalFilePath() + fileCheck.getFileName();
+//            }
+//        }
+//        FileInfo fileInfos = fileMapper.toFileInfoFromFileCheck(fileCheck,fileInfo.getPath(),UserContext.getCurrentUserId(), localFilePath,fileInfo.getFileType());
+//        fileInfoMapperService.save(fileInfos);
         return Result.success(fvo);
     }
 

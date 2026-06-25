@@ -1,7 +1,9 @@
 package com.ff.mycloud.mapper;
 
+import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.entity.FileObject;
 import com.ff.mycloud.model.vo.FileListVO;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -110,4 +112,16 @@ public interface FileMapper {
     @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
     @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
     FileInfo toFileInfoFromFileCheck(FileCheck fileCheck, String path, Long currentUserId, String localFilePath, String fileType);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "sha256Hash", source = "fileInfo.sha256Hash")
+    @Mapping(target = "fileSize", source = "fileInfo.fileSize")
+    @Mapping(target = "storagePath", source = "fileInfo.path")
+    @Mapping(target = "fileType", source = "fileInfo.fileType")
+    @Mapping(target = "fileSuffix", source = "fileInfo.fileSuffix")
+    @Mapping(target = "status", expression = "java(status.getCode())")
+    @Mapping(target = "refCount", constant = "1")
+    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
+    @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
+    FileObject toFileObject(FileInfo fileInfo, FileObjectStatus status);
 }
