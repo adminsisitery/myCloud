@@ -47,4 +47,27 @@ public class CommonConstants {
         public static final String UNKNOWN_IP = "unknown";
     }
 
+    public static class UserRole {
+        public static final long ADMIN_ID = 1;
+        public static final long USER_ID = 2;
+    }
+
+    /**
+     * 登录防爆破常量
+     */
+    public static class LoginFail {
+        /** Redis key 前缀：账户维度 */
+        public static final String ACCOUNT_KEY_PREFIX = "login:fail:account:";
+        /** Redis key 前缀：IP 维度 */
+        public static final String IP_KEY_PREFIX = "login:fail:ip:";
+        /** 账户维度最大失败次数（达到后硬锁） */
+        public static final int ACCOUNT_MAX_FAIL = 5;
+        /** IP 维度最大失败次数（1分钟内） */
+        public static final int IP_MAX_FAIL = 20;
+        /** 账户硬锁时长（秒） */
+        public static final long ACCOUNT_LOCK_SECONDS = 15 * 60;
+        /** IP 维度计数窗口（秒） */
+        public static final long IP_WINDOW_SECONDS = 60;
+    }
+
 } 

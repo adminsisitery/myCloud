@@ -3,6 +3,10 @@ package com.ff.mycloud.repositorys;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ff.mycloud.model.entity.User;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
 
 /**
  * @description: TODO 
@@ -13,4 +17,9 @@ import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+    List<String> selectRoleCodeByUserId(@Param("userId") Long userId);
+
+    void setUserRole(@Param("userId") Long userId,@Param("roleId") Long roleId);
+
+    void updateUserRole(@Param("userId")Long userId,@Param("roleId") Long roleId);
 }

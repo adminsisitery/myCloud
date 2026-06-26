@@ -2,6 +2,7 @@ package com.ff.mycloud.service;
 
 import com.ff.mycloud.model.dto.LoginDTO;
 import com.ff.mycloud.model.dto.RegisterDTO;
+import com.ff.mycloud.model.entity.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -19,4 +20,9 @@ public interface UserService {
      * 强制下线指定用户
      */
     void forceLogout(Long userId);
+
+
+    void addRole(Long userId, Long roleId);
+
+    void changeUserRole(UserRole userRole);
 }

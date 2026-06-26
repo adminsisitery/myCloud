@@ -1,11 +1,14 @@
 package com.ff.mycloud.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.User;
+import com.ff.mycloud.model.entity.UserRole;
 import com.ff.mycloud.repositorys.UserMapper;
 import com.ff.mycloud.service.UserMapperService;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,6 +20,16 @@ import java.util.Optional;
 
 @Service
 public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> implements UserMapperService {
+
+    @Override
+    public void updataUserRole(UserRole userRole) {
+        Long userId = userRole.getUserId();
+        Long roleId = userRole.getRoleId();
+        if (roleId!= CommonConstants.UserRole.USER_ID && userId!= CommonConstants.UserRole.ADMIN_ID){
+            return;
+        }
+        baseMapper.updateUserRole(userId,roleId);
+    }
 
     @Override
     public Optional<User> findByUsername(String username) {
@@ -48,6 +61,16 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
     @Override
     public User findByGithubId(String githubId) {
         return lambdaQuery().eq(User::getGithubId, githubId).one();
+    }
+
+    @Override
+    public List<String> getRoleById(long id) {
+        return baseMapper.selectRoleCodeByUserId(id);
+    }
+
+    @Override
+    public void SetUserRole(Long userId, Long roleId) {
+        baseMapper.setUserRole(userId,roleId);
     }
 
     public User findOneByUserId(Long id) {

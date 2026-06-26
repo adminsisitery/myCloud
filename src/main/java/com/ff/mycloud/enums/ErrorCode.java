@@ -39,6 +39,7 @@ public enum ErrorCode {
     USERNAME_EXISTS(400, "用户名已存在"),
     EMAIL_EXISTS(400, "邮箱已被注册"),
     ACCOUNT_DISABLED(400, "账号已被禁用"),
+    ACCOUNT_LOCKED(423, "账号已被临时锁定，请稍后再试"),
     FILE_TOO_LARGE(413, "文件过大，超出上传限制"),
     
     // OSS相关错误

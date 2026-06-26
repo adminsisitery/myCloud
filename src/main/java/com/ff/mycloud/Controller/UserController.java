@@ -1,11 +1,12 @@
 package com.ff.mycloud.Controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
-import com.ff.mycloud.common.util.EmailUtil;
 import com.ff.mycloud.model.dto.EmailSendDTO;
 import com.ff.mycloud.model.dto.LoginDTO;
 import com.ff.mycloud.model.dto.RegisterDTO;
+import com.ff.mycloud.model.entity.UserRole;
 import com.ff.mycloud.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,7 @@ public class UserController {
     public UserController(UserService userService) {
         this.userService = userService;
     }
+
 
     @PostMapping("/login")
     @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 5.0, timeout = 1000)
@@ -48,11 +50,20 @@ public class UserController {
     /**
      * 强制登出
      */
+    @SaCheckRole("admin")
     @PostMapping("/forceLogout/{userId}")
     @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 2.0, timeout = 500)
     public Result<Void> forceLogout(@PathVariable Long userId) {
         userService.forceLogout(userId);
         return Result.success();
+    }
+
+    @SaCheckRole("admin")
+    @PostMapping("/changeRole")
+    @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 2.0, timeout = 500)
+    public Result<Void> changeRole(@RequestBody UserRole userRole){
+       userService.changeUserRole(userRole);
+       return Result.success();
     }
     /**
      * 登出

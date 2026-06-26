@@ -66,9 +66,9 @@ sa-token:
   # token临时有效期
   active-timeout: -1
   # 是否允许同一账号并发登录
-  is-concurrent: true
+  is-concurrent: false
   # 在多人登录同一账号时，是否共用一个token
-  is-share: true
+  is-share: false
   # token风格
   token-style: uuid
   # 是否输出操作日志
@@ -98,5 +98,8 @@ oauth:
     client-secret: 7ac36eaf827915df6e5bb4d9218e30e045759fe1  # 必须填，不能空
     redirect-uri: http://localhost:8080/api/auth/github/callback  # 必须和GitHub应用配置的回调地址一致
 
-
+#Mybatis
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.ff.mycloud.model.entity
 
