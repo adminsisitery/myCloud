@@ -8,6 +8,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Function;
 
 @Component
@@ -23,6 +24,7 @@ public class UploadProgressRedis {
 
     public void createTask(UploadTask task) {
         getBucket(task.getId()).set(task, taskTtl());
+
     }
 
     public UploadTask getTask(String taskId) {
@@ -55,6 +57,24 @@ public class UploadProgressRedis {
 
     private String getKey(String taskId) {
         return UPLOAD_PROGRESS_PREFIX + taskId;
+    }
+
+    /**
+     * 扫描所有上传任务 ID（基于 SCAN，不阻塞 Redis）
+     */
+    public List<String> scanAllTaskIds() {
+        List<String> taskIds = new ArrayList<>();
+        for (String key : redisson.getKeys().getKeysByPattern(UPLOAD_PROGRESS_PREFIX + "*")) {
+            taskIds.add(key.substring(UPLOAD_PROGRESS_PREFIX.length()));
+        }
+        return taskIds;
+    }
+
+    /**
+     * 删除任务（超时扫描清理用）
+     */
+    public void deleteTask(String taskId) {
+        redisson.getKeys().delete(getKey(taskId));
     }
 
     private Duration taskTtl() {

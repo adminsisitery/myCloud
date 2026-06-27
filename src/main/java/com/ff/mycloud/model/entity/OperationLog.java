@@ -38,6 +38,9 @@ public class OperationLog {
     /** 客户端IP */
     private String clientIp;
 
+    /** 消息唯一ID（MQ 幂等去重） */
+    private String msgId;
+
     /** 操作时间 */
     private LocalDateTime createTime;
 

@@ -12,6 +12,11 @@ import org.springframework.stereotype.Component;
 /**
  * ES 同步消费者
  * 消费 MQ 消息，最终一致地维护 ES 文件索引
+ *
+ * 幂等说明：以下三个操作均为天然幂等，无需额外去重
+ *   INSERT → ES save() 内部 upsert，同 ID 写两次结果一致
+ *   DELETE → ES deleteById() 删除不存在记录不会报错（no-op）
+ *   UPDATE → renameById findById + save，改成同一名字结果一致
  */
 @Component
 public class ESSyncConsumer {

@@ -7,6 +7,8 @@ import com.ff.mycloud.model.entity.OperationLog;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 public class RabbitMqServiceImpl implements RabbitMqService {
 
@@ -33,6 +35,8 @@ public class RabbitMqServiceImpl implements RabbitMqService {
 
     @Override
     public void sendLogMessage(OperationLog operationLog) {
+        // 生成消息唯一ID，用于消费者幂等去重
+        operationLog.setMsgId(UUID.randomUUID().toString());
         rabbitTemplate.convertAndSend(CommonConstants.LogMQ.EXCHANGE,
                 CommonConstants.LogMQ.KEY, operationLog);
     }

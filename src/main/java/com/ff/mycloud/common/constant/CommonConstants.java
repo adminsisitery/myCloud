@@ -71,6 +71,16 @@ public class CommonConstants {
     }
 
     /**
+     * MQ 消息去重常量
+     */
+    public static class Dedup {
+        /** Redis key 前缀 */
+        public static final String KEY_PREFIX = "msg:consumed:";
+        /** 去重记录 TTL（秒） */
+        public static final long TTL_SECONDS = 24 * 60 * 60;
+    }
+
+    /**
      * 操作日志 MQ 常量
      */
     public static class LogMQ {
