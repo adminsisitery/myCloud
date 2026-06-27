@@ -54,11 +54,12 @@ public class UploadTimeoutTask {
     /**
      * 扫描并处理超时上传任务
      *
-     * 每5分钟执行一次（cron: 0 */5 * * * ?），遍历Redis中所有上传任务，
-     * 将创建时间超过30分钟且仍处于PENDING或UPLOADING状态的任务标记为失败。
-     * ShedLock分布式锁保证多节点环境下只有一个节点执行：
-     * 最少锁定时长1分钟，最多锁定时长5分钟。
-     * 处理完成后记录超时任务数量日志。
+     *
+     * 每5分钟执行一次 遍历Redis中所有上传任务
+     * 将创建时间超过30分钟且仍处于PENDING或UPLOADING状态的任务标记为失败
+     * ShedLock分布式锁保证多节点环境下只有一个节点执行
+     * 最少锁定时长1分钟，最多锁定时长5分钟
+     * 处理完成后记录超时任务数量日志
      */
     @Scheduled(cron = "0 */5 * * * ?")
     @SchedulerLock(name = "uploadTimeoutScan",
