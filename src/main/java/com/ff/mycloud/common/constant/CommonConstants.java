@@ -70,4 +70,13 @@ public class CommonConstants {
         public static final long IP_WINDOW_SECONDS = 60;
     }
 
+    /**
+     * 操作日志 MQ 常量
+     */
+    public static class LogMQ {
+        public static final String EXCHANGE = "log.topic";
+        public static final String QUEUE = "log.queue";
+        public static final String KEY = "operation_log";
+    }
+
 } 

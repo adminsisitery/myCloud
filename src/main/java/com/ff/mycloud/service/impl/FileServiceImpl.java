@@ -5,6 +5,7 @@ import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.FileHashUtil;
+import com.ff.mycloud.common.util.IpUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.enums.FileObjectStatus;
@@ -201,6 +202,8 @@ public class FileServiceImpl implements FileService {
         fileDocument.setFileType(fileInfo.getFileType());
         fileDocument.setUserId(currentUserId);
         rabbitMqService.sendInsertMessage(fileDocument);
+        sendOpLog(OperationLog.OP_UPLOAD, fileInfo.getId(),
+                fileDocument.getFileName(), fileInfo.getFileSize(), null);
     }
 
     private void createSample(File file, FileObject fileObject) {
@@ -245,6 +248,9 @@ public class FileServiceImpl implements FileService {
         fd.setId(fileId);
         fd.setFileName(fileInfo.getIsFolder() ? newFilename : newFilename + "." + fileInfo.getFileSuffix());
         rabbitMqService.sendUpdateMessage(fd);
+        sendOpLog(OperationLog.OP_RENAME, fileId,
+                fd.getFileName(), fileInfo.getFileSize(),
+                "原文件名:" + fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
     }
 
     public void deleteSimpleFile(Long fileId) {
@@ -429,10 +435,17 @@ public class FileServiceImpl implements FileService {
             file.setIsDeleted(true);
             file.setUpdatedAt(LocalDateTime.now());
             fileInfoMapperService.updateById(file);
-            //异步同步ES删除
+            //异步同步ES删除 + 操作日志
             FileDocument fd = new FileDocument();
             fd.setId(file.getId());
             rabbitMqService.sendDeleteMessage(fd);
+            if (!file.getIsFolder()) {
+                String name = file.getFilename();
+                if (file.getFileSuffix() != null && !file.getFileSuffix().isEmpty()) {
+                    name = name + "." + file.getFileSuffix();
+                }
+                sendOpLog(OperationLog.OP_DELETE, file.getId(), name, file.getFileSize(), null);
+            }
 
             // 物理删除（仅文件需要，且仅当无引用时）
             if (!file.getIsFolder()) {
@@ -529,6 +542,8 @@ public class FileServiceImpl implements FileService {
         fileDocument.setFileType(newFileInfo.getFileType());
         fileDocument.setUserId(UserContext.getCurrentUserId());
         rabbitMqService.sendInsertMessage(fileDocument);
+        sendOpLog(OperationLog.OP_UPLOAD, newFileInfo.getId(),
+                fileDocument.getFileName(), newFileInfo.getFileSize(), "秒传");
         return newFileInfo;
     }
 
@@ -566,5 +581,20 @@ public class FileServiceImpl implements FileService {
         return Result.success(fvo);
     }
 
+    /**
+     * 异步发送操作日志（MQ）
+     */
+    private void sendOpLog(String operation, Long fileId, String filename, Long fileSize, String extraInfo) {
+        OperationLog log = new OperationLog();
+        log.setUserId(UserContext.getCurrentUserId());
+        log.setOperation(operation);
+        log.setFileId(fileId);
+        log.setFilename(filename);
+        log.setFileSize(fileSize);
+        log.setExtraInfo(extraInfo);
+        log.setClientIp(IpUtil.getClientIp());
+        log.setCreateTime(LocalDateTime.now());
+        rabbitMqService.sendLogMessage(log);
+    }
 
 }
