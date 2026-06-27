@@ -30,9 +30,14 @@ import java.util.stream.Collectors;
 
 
 /**
- * @description: TODO
+ * 文件服务实现类
+ * <p>提供文件的核心业务逻辑，包括：
+ * 上传（普通上传和带进度上传）、秒传（基于SHA-256哈希）、
+ * 下载、列表、重命名、删除（单文件和递归文件夹）、文件内容获取等功能。
+ * 通过MQ异步同步ES索引和发送操作日志。</p>
+ *
  * @author 飞飞
- * @date 2026/2/14 13:21
+ * @date 2026/2/14
  * @version 1.0
  */
 @Slf4j
@@ -71,6 +76,17 @@ public class FileServiceImpl implements FileService {
         this.healthHttpCodeStatusMapper = healthHttpCodeStatusMapper;
     }
 
+    /**
+     * 上传文件
+     * <p>执行流程：
+     * 1. 计算文件SHA-256哈希值
+     * 2. 哈希匹配时执行秒传（复用已有文件记录）
+     * 3. 否则正常上传到存储系统并保存记录</p>
+     *
+     * @param file     上传的文件
+     * @param parentId 父目录ID
+     * @return 上传后的文件路径
+     */
     @Override
     public String uploadFile(MultipartFile file, Long parentId) {
 
@@ -115,12 +131,19 @@ public class FileServiceImpl implements FileService {
         return null;
     }
 
-    //显示文件列表
+    /**
+     * 列出指定目录下的所有文件和文件夹
+     * <p>文件夹排在前面，文件补充后缀名后返回。</p>
+     *
+     * @param parentId 父目录ID，为null时列出根目录
+     * @return 文件列表视图对象列表
+     */
     @Override
     public List<FileListVO> listFiles(Long parentId) {
         Long currentUserId = UserContext.getCurrentUserId();
         List<FileInfo> fileInfos = fileInfoMapperService.findByParentIdAndUserId(currentUserId,parentId);
 
+        // 补充文件后缀名
         for (FileInfo fileInfo : fileInfos) {
             if (!fileInfo.getIsFolder()) {
                 fileInfo.setFilename(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
@@ -131,6 +154,25 @@ public class FileServiceImpl implements FileService {
         return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
+    /**
+     * 从本地文件路径上传文件（支持进度跟踪、秒传、ES同步和操作日志）
+     * <p>执行流程：
+     * 1. 校验文件存在性
+     * 2. 计算SHA-256哈希值
+     * 3. 哈希匹配时执行秒传
+     * 4. 否则通过存储服务上传
+     * 5. 保存文件信息和对象记录
+     * 6. 通过MQ异步同步ES和发送操作日志</p>
+     *
+     * @param fileType         文件MIME类型
+     * @param absolutePath     文件的本地绝对路径
+     * @param originalFilename 原始文件名
+     * @param size             文件大小（字节）
+     * @param parentId         父目录ID
+     * @param taskId           上传任务ID（用于进度跟踪）
+     * @param currentUserId    当前用户ID
+     * @throws BusinessException 当文件不存在或不是常规文件时抛出
+     */
     @Override
     public void uploadFileWithProgressFromPath(String fileType, String absolutePath, String originalFilename, long size, Long parentId, String taskId, Long currentUserId) {
         //根据用户id获得用户信息
@@ -147,7 +189,7 @@ public class FileServiceImpl implements FileService {
         //计算文件的SHA-256
         String fileHashSHA256 = FileHashUtil.calculateSHA256(file);
         //查看数据库里是否有文件 是否上传过
-        //秒传只允许复用“当前用户已经拥有过的文件”。
+        //秒传只允许复用"当前用户已经拥有过的文件"。
         List<FileInfo> byHashAndUserId = fileInfoMapperService.findByHashAndUserId(fileHashSHA256, currentUserId);
         //存在文件 直接秒传
         if (!byHashAndUserId.isEmpty()){
@@ -188,6 +230,7 @@ public class FileServiceImpl implements FileService {
             }
         }
 
+        // 组装文件信息和文件对象并保存
         FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
         FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
         fileInfoMapperService.save(fileInfo);
@@ -206,10 +249,23 @@ public class FileServiceImpl implements FileService {
                 fileDocument.getFileName(), fileInfo.getFileSize(), null);
     }
 
+    /**
+     * 创建文件样本（预留方法，当前为空实现）
+     *
+     * @param file       文件对象
+     * @param fileObject 文件对象实体
+     */
     private void createSample(File file, FileObject fileObject) {
-        
+
     }
 
+    /**
+     * 下载文件
+     * <p>流程：校验用户权限和文件状态 -> 从存储系统获取文件内容并返回字节数组。</p>
+     *
+     * @param fileId 文件ID
+     * @return 文件的字节数组
+     */
     @Override
     public byte[] downloadFile(Long fileId) {
         //先得到fileInfo
@@ -218,11 +274,25 @@ public class FileServiceImpl implements FileService {
         return retrieveFileContent(andValidateFile);
     }
 
+    /**
+     * 获取文件名
+     *
+     * @param fileId 文件ID
+     * @return 文件名
+     */
     @Override
     public String getFilename(long fileId) {
         return fileInfoMapperService.getById(fileId).getFilename();
     }
 
+    /**
+     * 重命名文件
+     * <p>流程：校验新文件名 -> 查询文件存在 -> 去除文件名中的后缀 -> 更新数据库 -> MQ异步同步ES重命名 + 操作日志。</p>
+     *
+     * @param fileId      文件ID
+     * @param newFilename 新文件名
+     * @throws BusinessException 当文件名为空或文件不存在时抛出
+     */
     @Override
     public void renameFile(Long fileId, String newFilename) {
 
@@ -234,6 +304,7 @@ public class FileServiceImpl implements FileService {
         if (fileInfo == null) {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
+        // 去除文件名中的后缀扩展名
         int dotIndex = newFilename.lastIndexOf(".");
         if (dotIndex != -1) {
             newFilename = newFilename.substring(0, dotIndex);
@@ -253,6 +324,12 @@ public class FileServiceImpl implements FileService {
                 "原文件名:" + fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
     }
 
+    /**
+     * 简单删除单个文件（不处理文件夹递归）
+     * <p>流程：逻辑删除记录 -> 更新用户已用空间 -> 判断哈希引用数 -> 无引用时物理删除存储文件。</p>
+     *
+     * @param fileId 文件ID
+     */
     public void deleteSimpleFile(Long fileId) {
         FileInfo fileInfo = fileInfoMapperService.getById(fileId);
         //计算具有相同文件的索引个数
@@ -277,94 +354,20 @@ public class FileServiceImpl implements FileService {
             log.info("Physically deleted file: {}", fileInfo.getPath());
         }
     }
-//    @Override
-//    public void deleteFile(Long fileId) {
-//        // 1. 空值校验：防止fileId无效导致NPE
-//        if (fileId == null) {
-//            log.error("删除文件失败：fileId为空");
-//            throw new IllegalArgumentException("文件ID不能为空");
-//        }
-//
-//        // 2. 获取根节点并校验
-//        FileInfo root = fileInfoMapperService.getById(fileId);
-//        if (root == null) {
-//            log.error("删除文件失败：未找到ID为{}的文件/文件夹", fileId);
-//            throw new RuntimeException("文件/文件夹不存在");
-//        }
-//
-//        // 3. 权限校验：确保操作的是当前用户的文件
-//        Long currentUserId = UserContext.getCurrentUserId();
-//        if (!root.getUserId().equals(currentUserId)) {
-//            log.error("删除文件失败：用户{}无权限删除用户{}的文件(ID:{})",
-//                    currentUserId, root.getUserId(), fileId);
-//            throw new RuntimeException("无权限删除该文件/文件夹");
-//        }
-//
-//        // 4. 修复路径匹配：统一处理路径结尾的/，避免双/或无/导致匹配失败
-//        String rootFilePath = root.getLocalFilePath();
-//        // 标准化路径：确保结尾无/，后续拼接统一加/
-//        if (rootFilePath.endsWith("/")) {
-//            rootFilePath = rootFilePath.substring(0, rootFilePath.length() - 1);
-//        }
-//        log.info("开始删除文件/文件夹：ID={}, 路径={}, 用户ID={}", fileId, rootFilePath, currentUserId);
-//
-//        // 5. 获取待删除的所有子节点
-//        List<FileInfo> files = fileInfoMapperService.getSubTree(rootFilePath, currentUserId);
-//        log.info("查询到待删除的文件/文件夹数量：{}", files.size());
-//
-//        long totalSize = 0;
-//
-//        // 6. 批量标记删除 + 统计空间 + 物理删除（按需）
-//        for (FileInfo file : files) {
-//            log.debug("处理文件/文件夹：ID={}, 路径={}, 是否文件夹={}",
-//                    file.getId(), file.getLocalFilePath(), file.getIsFolder());
-//
-//            // 统计文件大小（文件夹不统计）
-//            if (!file.getIsFolder()) {
-//                totalSize += file.getFileSize();
-//            }
-//
-//            // 标记为已删除
-//            file.setIsDeleted(true);
-//            file.setUpdatedAt(LocalDateTime.now());
-//            fileInfoMapperService.updateById(file);
-//
-//            // 秒传引用判断：仅文件需要处理物理删除
-//            if (!file.getIsFolder()) {
-//                // 关键：countFiles需要统计所有状态的引用数，否则会误判
-//                long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
-//                log.debug("文件{}的SHA256引用数：{}", file.getLocalFilePath(), referenceCount);
-//
-//                if (referenceCount <= 1) {
-//                    StorageService storageService = storageServiceFactory.getStorageService();
-//                    // 物理删除文件（增加异常捕获，避免单个文件删除失败导致整体中断）
-//                    try {
-//                        storageService.deleteFile(file.getPath());
-//                        log.info("物理删除文件成功：{}", file.getPath());
-//                    } catch (Exception e) {
-//                        log.error("物理删除文件失败：{}", file.getPath(), e);
-//                        // 可选：抛出异常中断，或记录后继续
-//                        // throw new RuntimeException("物理删除文件失败", e);
-//                    }
-//                }
-//            }
-//        }
-//
-//        // 7. 更新用户空间（校验用户存在）
-//        UserCenter user = userCenterMapperService.getByUserId(currentUserId);
-//        if (user == null) {
-//            log.error("更新用户空间失败：未找到用户{}", currentUserId);
-//            throw new RuntimeException("用户不存在");
-//        }
-//
-//        // 防止空间变为负数
-//        long newUsedSpace = Math.max(0, user.getUsedSpace() - totalSize);
-//        user.setUsedSpace(newUsedSpace);
-//        userCenterMapperService.updateById(user);
-//        log.info("删除完成：共释放空间{}字节，用户{}当前已用空间{}",
-//                totalSize, currentUserId, newUsedSpace);
-//    }
 
+    /**
+     * 删除文件或文件夹
+     * <p>核心分支判断：
+     * <ul>
+     *   <li>文件夹：获取子树后递归处理（逻辑删除所有子节点 + 物理删除无引用的文件）</li>
+     *   <li>单文件：直接处理当前文件</li>
+     * </ul>
+     * 同时通过MQ异步同步ES删除和发送操作日志，最后更新用户已用空间。</p>
+     *
+     * @param fileId 文件ID
+     * @throws IllegalArgumentException 当fileId为空时抛出
+     * @throws RuntimeException 当文件不存在、无权限或用户不存在时抛出
+     */
     @Override
     public void deleteFile(Long fileId) {
         // 1. 空值校验
@@ -452,6 +455,7 @@ public class FileServiceImpl implements FileService {
                 long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
                 log.debug("文件{}引用数：{}", file.getLocalFilePath(), referenceCount);
 
+                // 无其他引用时物理删除存储文件
                 if (referenceCount <= 1) {
                     StorageService storageService = storageServiceFactory.getStorageService();
                     try {
@@ -479,6 +483,13 @@ public class FileServiceImpl implements FileService {
                 totalSize, currentUserId, newUsedSpace);
     }
 
+    /**
+     * 获取文件内容（仅根据ID，不校验用户权限）
+     *
+     * @param id 文件ID
+     * @return 文件的字节数组
+     * @throws BusinessException 当文件不存在时抛出
+     */
     @Override
     public byte[] getFileContent(Long id) {
         FileInfo byId = fileInfoMapperService.getById(id);
@@ -488,6 +499,12 @@ public class FileServiceImpl implements FileService {
         return retrieveFileContent(byId);
     }
 
+    /**
+     * 根据存储路径获取文件输入流
+     *
+     * @param path 文件在存储系统中的路径
+     * @return 文件的输入流
+     */
     @Override
     public InputStream getFile(String path) {
         StorageService storageService = storageServiceFactory.getStorageService();
@@ -495,6 +512,13 @@ public class FileServiceImpl implements FileService {
     }
 
 
+    /**
+     * 从存储系统获取文件内容
+     * <p>校验是否为文件夹（不能下载文件夹），然后通过存储服务下载文件字节数组。</p>
+     *
+     * @param andValidateFile 已验证的文件信息
+     * @return 文件的字节数组
+     */
     private byte[] retrieveFileContent(FileInfo andValidateFile) {
         ExceptionUtil.throwIf(andValidateFile.getIsFolder(),ErrorCode.CANNOT_DOWNLOAD_FOLDER);
         String filePath = andValidateFile.getPath();
@@ -502,6 +526,15 @@ public class FileServiceImpl implements FileService {
         return storageService.downloadFile(filePath);
     }
 
+    /**
+     * 获取并校验文件权限
+     * <p>校验：文件存在、属于当前用户、未被删除。</p>
+     *
+     * @param fileId       文件ID
+     * @param currentUser  当前用户
+     * @return 校验通过的文件信息
+     * @throws BusinessException 当文件不存在、无权限或已删除时抛出
+     */
     private FileInfo getAndValidateFile(Long fileId, User currentUser) {
         FileInfo byId = fileInfoMapperService.getById(fileId);
         if (byId==null){
@@ -513,6 +546,14 @@ public class FileServiceImpl implements FileService {
     }
 
 
+    /**
+     * 获取上传目标路径
+     * <p>根据用户ID生成存储路径前缀。</p>
+     *
+     * @param parentId     父目录ID（当前未使用，预留扩展）
+     * @param currentUser  当前用户
+     * @return 上传路径字符串
+     */
     private String getUploadPath(Long parentId, User currentUser) {
         //1.如果没有传入父路径的情况
         String path = CommonConstants.File.FILE_PATH_PREFIX + currentUser.getId();
@@ -520,6 +561,20 @@ public class FileServiceImpl implements FileService {
         return path;
     }
 
+    /**
+     * 处理秒传操作
+     * <p>原理：不实际上传文件，在数据库生成新记录复用已有文件的存储路径。
+     * 通过MQ异步同步ES索引和发送操作日志。</p>
+     *
+     * @param filename     文件名
+     * @param fileSize     文件大小
+     * @param existingFile 已存在的文件记录
+     * @param sha256Hash   文件SHA-256哈希值
+     * @param parentId     父目录ID
+     * @param taskId       上传任务ID（有则更新进度）
+     * @param currentUser  当前用户
+     * @return 新生成的文件信息
+     */
 //    这个原理就是不用上传文件 在数据库生成一个记录就行 不管用户文甲明是不是一样 只要路径对应就行
     private FileInfo handleFastUpload(String filename, long fileSize, FileInfo existingFile, String sha256Hash, Long parentId, String taskId, User currentUser) {
         // 使用MapStruct创建一个新的文件记录
@@ -548,11 +603,12 @@ public class FileServiceImpl implements FileService {
     }
 
     /**
-     * 文件秒传操作
-     * @param fileCheck
-     * @return
+     * 文件秒传校验
+     * <p>根据SHA-256哈希值查询文件是否已存在，返回是否可秒传的结果。</p>
+     *
+     * @param fileCheck 文件校验参数
+     * @return 文件校验结果视图（exists=true表示可秒传）
      */
-
     @Override
     public Result<FileCheckVO> checkFilesHash(FileCheck fileCheck) {
         String sha256Hash = fileCheck.getSha256Hash();
@@ -582,7 +638,14 @@ public class FileServiceImpl implements FileService {
     }
 
     /**
-     * 异步发送操作日志（MQ）
+     * 异步发送操作日志（通过MQ）
+     * <p>组装操作日志实体并通过RabbitMQ异步发送，包含用户ID、操作类型、文件信息、客户端IP等。</p>
+     *
+     * @param operation 操作类型（如上传、删除、重命名）
+     * @param fileId    文件ID
+     * @param filename  文件名
+     * @param fileSize  文件大小
+     * @param extraInfo 额外描述信息（如"秒传"、原文件名等）
      */
     private void sendOpLog(String operation, Long fileId, String filename, Long fileSize, String extraInfo) {
         OperationLog log = new OperationLog();

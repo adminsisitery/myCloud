@@ -1,7 +1,10 @@
 package com.ff.mycloud.common.constant;
 
 /**
- * 文件分享相关常量
+ * 文件分享相关常量，包含Redis键前缀、Token过期时间等配置。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 public class ShareConstants {
     

@@ -13,16 +13,20 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 上传任务超时扫描
+ * 上传任务超时扫描定时任务
  *
  * 每5分钟扫描一次 Redis 中仍在进行的上传任务，
  * 将超过30分钟未完成的任务标记为失败。
+ * 使用ShedLock分布式锁确保多节点部署时只有一个节点执行此任务。
  *
  * 与正常失败的区别：
  *   正常失败 → 线程池 catch 异常 → 立即释放空间 + 删临时文件
  *   超时失败 → 线程已无法执行 → 只能标记状态，空间无法自动释放
  *
  * TODO: UploadTask 加 userId 后可自动释放空间
+ *
+ * @author 飞飞
+ * @date 2026/3/14
  */
 @Component
 public class UploadTimeoutTask {
@@ -35,12 +39,27 @@ public class UploadTimeoutTask {
     private final UploadProgressRedis uploadProgressRedis;
     private final UpLoadProgressService upLoadProgressService;
 
+    /**
+     * 构造方法注入依赖
+     *
+     * @param uploadProgressRedis  Redis上传进度操作类，用于扫描和获取上传任务
+     * @param upLoadProgressService 上传进度服务，用于完成/失败上传任务的状态更新
+     */
     public UploadTimeoutTask(UploadProgressRedis uploadProgressRedis,
                              UpLoadProgressService upLoadProgressService) {
         this.uploadProgressRedis = uploadProgressRedis;
         this.upLoadProgressService = upLoadProgressService;
     }
 
+    /**
+     * 扫描并处理超时上传任务
+     *
+     * 每5分钟执行一次（cron: 0 */5 * * * ?），遍历Redis中所有上传任务，
+     * 将创建时间超过30分钟且仍处于PENDING或UPLOADING状态的任务标记为失败。
+     * ShedLock分布式锁保证多节点环境下只有一个节点执行：
+     * 最少锁定时长1分钟，最多锁定时长5分钟。
+     * 处理完成后记录超时任务数量日志。
+     */
     @Scheduled(cron = "0 */5 * * * ?")
     @SchedulerLock(name = "uploadTimeoutScan",
                    lockAtLeastFor = "PT1M",

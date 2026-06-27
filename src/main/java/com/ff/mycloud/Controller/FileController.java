@@ -29,6 +29,16 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 文件管理控制器
+ * <p>
+ * 提供文件的核心 CRUD 操作接口，包括文件列表查询、上传、下载、重命名、删除、
+ * 搜索以及文件秒传检测。所有接口均启用了 IP + 用户维度的限流保护。
+ * </p>
+ *
+ * @author 飞飞
+ * @date 2026/6/27
+ */
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
@@ -37,18 +47,44 @@ public class FileController {
     private final FileUploadTaskService fileUploadTaskService;
     private final FileSearchHandler fileSearchHandler;
 
+    /**
+     * 构造器注入文件服务相关依赖
+     *
+     * @param fileService           文件核心服务
+     * @param fileUploadTaskService 文件上传任务服务
+     * @param fileSearchHandler     文件搜索处理器
+     */
     public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService, FileSearchHandler fileSearchHandler) {
         this.fileService = fileService;
         this.fileUploadTaskService = fileUploadTaskService;
         this.fileSearchHandler = fileSearchHandler;
     }
 
+    /**
+     * 查询文件列表
+     * <p>
+     * 根据父目录ID（parentId）获取当前目录下的文件列表，默认 parentId 为 0（根目录）。
+     * </p>
+     *
+     * @param parentId 父目录ID，0 表示根目录
+     * @return 文件列表 VO 集合
+     */
     @GetMapping
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 10.0, timeout = 500)
     public Result<List<FileListVO>> listFiles(@RequestParam(value = "parentId", required = false, defaultValue = "0") Long parentId) {
         return Result.success(fileService.listFiles(parentId));
     }
 
+    /**
+     * 带进度回调的文件上传
+     * <p>
+     * 接收前端上传的文件流，异步处理上传并可通过任务ID查询上传进度。
+     * </p>
+     *
+     * @param file     上传的文件（MultipartFile）
+     * @param parentId 父目录ID
+     * @return 上传任务ID
+     */
     @PostMapping("/progress")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
     public Result<String> uploadWithProgress(
@@ -57,6 +93,15 @@ public class FileController {
         return fileUploadTaskService.uploadWithProgress(file, parentId);
     }
 
+    /**
+     * 下载文件
+     * <p>
+     * 根据文件ID下载文件二进制内容，设置正确的 Content-Disposition 和 Content-Type 响应头。
+     * </p>
+     *
+     * @param fileId 文件ID
+     * @return ResponseEntity 包含文件字节数组的响应实体
+     */
     @GetMapping("/{fileId}/content")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
     public ResponseEntity<byte[]> downloadFile(@PathVariable long fileId) {
@@ -70,6 +115,16 @@ public class FileController {
         return ResponseEntity.ok().headers(http).body(content);
     }
 
+    /**
+     * 重命名文件
+     * <p>
+     * 修改指定文件的名称，新的文件名通过请求体传入。
+     * </p>
+     *
+     * @param fileId 文件ID
+     * @param dto    包含新文件名的 DTO
+     * @return 操作结果
+     */
     @PatchMapping("/{fileId}/name")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> renameFile(@PathVariable Long fileId, @Valid @RequestBody FileRenameDTO dto) {
@@ -77,6 +132,15 @@ public class FileController {
         return Result.success();
     }
 
+    /**
+     * 删除文件
+     * <p>
+     * 根据文件ID删除文件（支持逻辑删除或物理删除，由服务层决定）。
+     * </p>
+     *
+     * @param fileId 文件ID
+     * @return 操作结果
+     */
     @DeleteMapping("/{fileId}")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> deleteFile(@PathVariable Long fileId) {
@@ -84,12 +148,31 @@ public class FileController {
         return Result.success();
     }
 
+    /**
+     * 全文搜索文件
+     * <p>
+     * 根据关键词搜索当前用户拥有的文件，由 FileSearchHandler 决定使用 ES 或 MySQL 搜索策略。
+     * </p>
+     *
+     * @param keyword 搜索关键词
+     * @return 匹配的文件列表
+     */
     @GetMapping("/search")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 1000)
     public Result<List<FileListVO>> searchFiles(@RequestParam String keyword) {
         return Result.success(fileSearchHandler.searchFiles(keyword));
     }
 
+    /**
+     * 文件秒传检测
+     * <p>
+     * 根据文件的哈希值检测该文件是否已存在于服务器中。
+     * 如果已存在则无需再次上传，直接返回已有文件信息（秒传机制）。
+     * </p>
+     *
+     * @param fileCheck 包含文件哈希等信息的检测参数
+     * @return 文件检测结果 VO
+     */
     @PostMapping("/check")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
     public Result<FileCheckVO> checkFiles(@RequestParam FileCheck fileCheck) {

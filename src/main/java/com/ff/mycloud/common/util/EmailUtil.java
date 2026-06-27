@@ -10,10 +10,11 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
 /**
- * @description: TODO 
+ * 邮件发送工具类，用于发送系统通知邮件（如验证码）。
+ * 基于Spring JavaMailSender，支持HTML格式邮件发送。
+ *
  * @author 飞飞
- * @date 2026/1/20 10:09
- * @version 1.0
+ * @date 2026/6/27
  */
 
 @Component
@@ -22,6 +23,12 @@ public class EmailUtil {
     private static JavaMailSender mailSender;
     private static String fromEmail;
 
+    /**
+     * 构造方法，初始化MailSender和发件人邮箱地址
+     *
+     * @param mailSender Spring邮件发送器
+     * @param fromEmail  发件人邮箱地址（从配置文件注入）
+     */
     public EmailUtil(JavaMailSender mailSender,
                      @Value("${spring.mail.username}")
                      String fromEmail) {
@@ -29,12 +36,27 @@ public class EmailUtil {
         EmailUtil.fromEmail = fromEmail;
     }
 
+    /**
+     * 发送验证码邮件
+     *
+     * @param toEmail          收件人邮箱地址
+     * @param verificationCode 验证码
+     * @return true表示发送成功，false表示发送失败
+     */
     public static boolean sendVerificationCode(String toEmail, String verificationCode)  {
         String subject = "MY Cloud 验证码";
         String content = buildVerificationEmailContent(verificationCode);
         return sendHtmlEmail(toEmail,subject,content);
     }
 
+    /**
+     * 发送HTML格式邮件
+     *
+     * @param toEmail 收件人邮箱地址
+     * @param subject 邮件主题
+     * @param content HTML格式的邮件内容
+     * @return true表示发送成功，false表示发送失败
+     */
     private static boolean sendHtmlEmail(String toEmail, String subject, String content)  {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
@@ -52,6 +74,12 @@ public class EmailUtil {
 
     }
 
+    /**
+     * 构建验证码邮件的HTML内容
+     *
+     * @param verificationCode 验证码
+     * @return HTML格式的邮件内容字符串
+     */
     private static String buildVerificationEmailContent(String verificationCode) {
         return "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;\">"
                 + "<h2 style=\"color: #1976d2; text-align: center;\">Cloud Drive 验证码</h2>"

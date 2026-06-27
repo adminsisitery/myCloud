@@ -27,7 +27,13 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 
 /**
- * @description: TODO
+ * Github OAuth 认证控制器
+ * <p>
+ * 处理 Github 第三方登录的完整流程：跳转 Github 授权页面 -> Github 回调 ->
+ * 获取用户信息 -> 新用户自动注册/老用户登录 -> 生成 Sa-Token 并重定向至前端。
+ * 包含限流保护，登录和回调接口均限制为约 5 次/分钟。
+ * </p>
+ *
  * @author 飞飞
  * @date 2026/3/4 21:50
  * @version 1.0
@@ -40,6 +46,13 @@ public class GithubAuthController {
     private final UserMapperService userMapperService;
     UserCenterMapperService userCenterMapperService;
 
+    /**
+     * 构造器注入 Github 授权请求、用户服务和用户中心服务
+     *
+     * @param githubAuthRequest        Github OAuth 授权请求对象
+     * @param userMapperService        用户 Mapper 服务
+     * @param userCenterMapperService  用户中心 Mapper 服务
+     */
     public GithubAuthController(AuthRequest githubAuthRequest, UserMapperService userMapperService, UserCenterMapperService userCenterMapperService) {
         this.githubAuthRequest = githubAuthRequest;
         this.userMapperService = userMapperService;
@@ -47,7 +60,16 @@ public class GithubAuthController {
 
     }
 
-    // 1 跳转 GitHub
+    /**
+     * 跳转 Github 授权页面（步骤1）
+     * <p>
+     * 重定向用户到 Github OAuth 授权页面。限流：每个 IP + 全局维度约 5 次/分钟。
+     * 超出限制时触发 callbackFallback 降级方法。
+     * </p>
+     *
+     * @param response HTTP 响应对象，用于重定向
+     * @throws IOException 重定向时可能抛出的 IO 异常
+     */
     @GetMapping("/login")
     @RateLimit(
             dimensions = {RateLimit.Dimension.IP, RateLimit.Dimension.GLOBAL}, // IP+全局维度
@@ -56,15 +78,25 @@ public class GithubAuthController {
             fallback = "callbackFallback" // 降级方法
     )
     public void login(HttpServletResponse response) throws IOException {
-        //跳转
+        // 重定向到 Github 授权页面
         response.sendRedirect(githubAuthRequest.authorize(null));
 
     }
 
 
-    // 2 回调
+    /**
+     * Github 回调接口（步骤2）
+     * <p>
+     * 接收 Github 返回的授权码，获取用户信息。新用户自动创建账号和用户中心记录，
+     * 已注册用户直接登录。登录成功后生成 Sa-Token 并重定向前端 oauth-success 页面。
+     * 限流：每个 IP + 全局维度约 5 次/分钟。
+     * </p>
+     *
+     * @param callback Github 回调参数（包含授权码 code 和 state）
+     * @param response HTTP 响应对象，用于重定向
+     * @throws IOException 重定向时可能抛出的 IO 异常
+     */
     @GetMapping("/callback")
-    // 2 回调 - 加限流
     @RateLimit(
             dimensions = {RateLimit.Dimension.IP, RateLimit.Dimension.GLOBAL}, // IP+全局维度
             permitsPerSecond = 0.083, // 约5次/分钟（5/60≈0.083）
@@ -73,6 +105,7 @@ public class GithubAuthController {
     )
     public void callback(AuthCallback callback,
                          HttpServletResponse response) throws IOException {
+        // 使用授权码从 Github 获取用户信息
         AuthResponse<AuthUser> authResponse = githubAuthRequest.login(callback);
         AuthUser authUser = authResponse.getData();
 
@@ -82,7 +115,7 @@ public class GithubAuthController {
             return;
         }
 
-
+        // 提取 Github 用户信息
         String accessToken = authUser.getToken().getAccessToken();
         String githubId = authUser.getUuid();
         String username = authUser.getUsername();
@@ -91,18 +124,19 @@ public class GithubAuthController {
 
 
         if (byGithubId==null ){
-            //注册
+            // 新用户：自动注册账号
             byGithubId = new User();
             byGithubId.setUsername(username);
             byGithubId.setAvatar(avatar);
             byGithubId.setGithubId(githubId);
             byGithubId.setCreateTime(LocalDateTime.now());
             byGithubId.setUpdateTime(LocalDateTime.now());
-            byGithubId.setPassword("{GITHUB_LOGIN}"); // 只占位，永远不会用
+            byGithubId.setPassword("{GITHUB_LOGIN}"); // 占位密码，Github 登录不校验密码
             byGithubId.setStatus(1);
             byGithubId.setEmail(username+"@github.com");
             userMapperService.save(byGithubId);
 
+            // 为新用户创建用户中心记录（默认 10MB 空间）
             UserCenter userCenter = new UserCenter();
             userCenter.setUsername(username);
             userCenter.setUserId(UserContext.getCurrentUserId());
@@ -112,17 +146,27 @@ public class GithubAuthController {
             userCenterMapperService.save(userCenter);
         }
 
-        //生成sa-token
+        // 生成 Sa-Token 并登录
         StpUtil.login(byGithubId.getId());
         String tokenValue = StpUtil.getTokenValue();
 
-        // 重定向前端
+        // 重定向前端 oauth-success 页面，携带 token
         response.sendRedirect(
                 "http://localhost:5173/oauth-success?token=" + tokenValue
         );
 
     }
-    // callback接口的降级方法（参数/返回值和原方法一致）
+
+    /**
+     * callback 接口的降级方法
+     * <p>
+     * 当回调接口触发限流时，重定向至登录页并携带错误提示信息。
+     * </p>
+     *
+     * @param callback Github 回调参数
+     * @param response HTTP 响应对象
+     * @throws IOException 重定向时可能抛出的 IO 异常
+     */
     public void callbackFallback(AuthCallback callback, HttpServletResponse response) throws IOException {
         // 降级逻辑：跳回登录页，并携带错误提示
         response.sendRedirect("http://localhost:5173/login?error=请求太频繁，请1分钟后再尝试");

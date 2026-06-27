@@ -5,7 +5,11 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * IP 工具类
+ * IP工具类，用于获取当前HTTP请求的客户端IP地址。
+ * 优先从代理头获取，最后回退到直连IP。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 public class IpUtil {
 

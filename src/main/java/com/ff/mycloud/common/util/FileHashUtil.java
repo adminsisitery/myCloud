@@ -11,7 +11,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * 文件哈希计算工具类
+ * 文件哈希计算工具类，使用SHA-256算法计算文件的哈希值。
+ * 支持MultipartFile、File和InputStream三种输入源。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 public class FileHashUtil {
 

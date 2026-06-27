@@ -6,16 +6,19 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 /**
- * @description: TODO 
+ * 功能描述：上传进度映射器，负责将上传任务实体转换为上传进度视图对象。
+ *
  * @author 飞飞
- * @date 2026/3/3 18:28
- * @version 1.0
+ * @date 2026/06/27
  */
-
 @Mapper(componentModel = "spring")
 public interface UploadProgressMapper {
+
     /**
-     * 将UploadTask转换为UploadProgressVO
+     * 功能：将上传任务实体转换为上传进度视图对象。
+     *
+     * @param task 上传任务实体
+     * @return 上传进度视图对象
      */
     @Mapping(target = "taskId", source = "id")
     @Mapping(target = "filename", source = "filename")

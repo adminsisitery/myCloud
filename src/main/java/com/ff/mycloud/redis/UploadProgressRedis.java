@@ -11,30 +11,74 @@ import java.time.Duration;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * 上传进度 Redis 操作
+ * <p>
+ * 基于Redisson Bucket实现上传任务进度的存储与更新。
+ * 使用分布式锁保证并发更新时的数据一致性。
+ * 支持创建、查询、更新、扫描、删除上传任务，TTL默认1小时。
+ * </p>
+ *
+ * @author 飞飞
+ * @date 2026/06/27
+ */
 @Component
 public class UploadProgressRedis {
 
+    /** Redis Key前缀 */
     public static final String UPLOAD_PROGRESS_PREFIX = "upload_progress:";
 
     private final RedissonClient redisson;
 
+    /**
+     * 构造函数
+     *
+     * @param redisson Redisson客户端实例
+     */
     public UploadProgressRedis(RedissonClient redisson) {
         this.redisson = redisson;
     }
 
+    /**
+     * 创建上传任务并存入Redis
+     *
+     * @param task 上传任务对象
+     */
     public void createTask(UploadTask task) {
         getBucket(task.getId()).set(task, taskTtl());
-
     }
 
+    /**
+     * 从Redis获取上传任务
+     *
+     * @param taskId 任务ID
+     * @return 上传任务对象，不存在返回null
+     */
     public UploadTask getTask(String taskId) {
         return getBucket(taskId).get();
     }
 
+    /**
+     * 保存/更新上传任务到Redis
+     *
+     * @param task 上传任务对象
+     */
     public void saveTask(UploadTask task) {
         getBucket(task.getId()).set(task, taskTtl());
     }
 
+    /**
+     * 带分布式锁的任务更新操作
+     * <p>
+     * 加锁后读取任务 -> 执行更新函数 -> 保存回Redis -> 释放锁。
+     * 保证并发场景下任务状态的原子更新。
+     * </p>
+     *
+     * @param taskId  任务ID
+     * @param updater 更新函数，接收当前任务对象并返回自定义结果
+     * @param <T>     更新函数的返回值类型
+     * @return 更新函数的返回值，任务不存在返回null
+     */
     public <T> T updateTask(String taskId, Function<UploadTask, T> updater) {
         RLock lock = redisson.getLock(getKey(taskId) + ":lock");
         lock.lock();
@@ -51,16 +95,31 @@ public class UploadProgressRedis {
         }
     }
 
+    /**
+     * 获取任务对应的Redis Bucket
+     *
+     * @param taskId 任务ID
+     * @return RBucket实例
+     */
     private RBucket<UploadTask> getBucket(String taskId) {
         return redisson.getBucket(getKey(taskId));
     }
 
+    /**
+     * 组装完整的Redis Key
+     *
+     * @param taskId 任务ID
+     * @return 完整Redis Key，格式: upload_progress:{taskId}
+     */
     private String getKey(String taskId) {
         return UPLOAD_PROGRESS_PREFIX + taskId;
     }
 
     /**
-     * 扫描所有上传任务 ID（基于 SCAN，不阻塞 Redis）
+     * 扫描所有上传任务ID
+     * <p>基于Redis SCAN命令，不阻塞Redis服务。</p>
+     *
+     * @return 所有上传任务ID列表
      */
     public List<String> scanAllTaskIds() {
         List<String> taskIds = new ArrayList<>();
@@ -71,12 +130,20 @@ public class UploadProgressRedis {
     }
 
     /**
-     * 删除任务（超时扫描清理用）
+     * 删除上传任务
+     * <p>用于超时扫描清理或任务取消后释放Redis空间。</p>
+     *
+     * @param taskId 任务ID
      */
     public void deleteTask(String taskId) {
         redisson.getKeys().delete(getKey(taskId));
     }
 
+    /**
+     * 获取任务数据在Redis中的存活时间
+     *
+     * @return 固定1小时的TTL
+     */
     private Duration taskTtl() {
         return Duration.ofMillis(CommonConstants.Time.ONE_HOUR);
     }

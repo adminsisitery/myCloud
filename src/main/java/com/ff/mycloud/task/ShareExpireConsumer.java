@@ -26,7 +26,10 @@ public class ShareExpireConsumer {
     private final shareServiceImpl shareServiceImpl;
 
     /**
-     * 构造方法注入依赖（和你项目的注入风格保持一致）
+     * 构造方法注入依赖
+     *
+     * @param redissonClient   Redisson客户端，用于获取阻塞队列
+     * @param shareServiceImpl 分享业务实现类，用于执行分享过期标记操作
      */
     public ShareExpireConsumer(RedissonClient redissonClient, shareServiceImpl shareServiceImpl) {
         this.redissonClient = redissonClient;
@@ -34,8 +37,13 @@ public class ShareExpireConsumer {
     }
 
     /**
-     * 项目启动时自动启动监听线程
-     * @PostConstruct：Spring初始化完Bean后执行
+     * 项目启动时自动启动分享过期监听线程
+     *
+     * 创建独立守护线程，阻塞监听Redis延迟队列中的到期分享ID，
+     * 收到消息后调用业务层标记分享为失效状态。
+     * 配合{@link ShareExpireTask}定时任务形成「实时触发 + 批量兜底」双层过期保障机制。
+     *
+     * @PostConstruct 确保Spring容器初始化完该Bean后立即执行
      */
     @PostConstruct
     public void startShareExpireListener() {

@@ -6,7 +6,10 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 /**
- * HTTP 工具类
+ * HTTP工具类，提供获取客户端真实IP地址等Web相关工具方法。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 public class HttpUtil {
     

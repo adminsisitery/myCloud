@@ -9,13 +9,26 @@ import java.util.List;
 
 /**
  * 登录防爆破 Redis 操作
- * 双维度（账户 + IP）+ Lua 原子计数 + 渐进退避
+ * <p>
+ * 双维度（账户 + IP）+ Lua 原子计数 + 渐进退避。
+ * 通过Redis执行Lua脚本实现原子性的登录失败计数与拦截判断，
+ * 防止暴力破解攻击。支持账户维度和IP维度的双重防护，
+ * 以及基于失败次数的渐进式等待时间增长。
+ * </p>
+ *
+ * @author 飞飞
+ * @date 2026/06/27
  */
 @Component
 public class LoginFailRedis {
 
     private final RedissonClient redisClient;
 
+    /**
+     * 构造函数
+     *
+     * @param redisClient Redisson客户端实例
+     */
     public LoginFailRedis(RedissonClient redisClient) {
         this.redisClient = redisClient;
     }

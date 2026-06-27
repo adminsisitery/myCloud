@@ -8,7 +8,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 文件类型工具类，用于根据文件名或扩展名确定文件的MIME类型
+ * 文件类型工具类，用于根据文件名或扩展名确定文件的MIME类型。
+ * 支持图片、文档、音视频、压缩包及各类代码/文本文件的类型识别，
+ * 并提供文件预览支持判断。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 public class FileTypeUtil {
 
@@ -188,6 +193,13 @@ public class FileTypeUtil {
         return mimeType;
     }
 
+    /**
+     * 判断指定后缀的文件是否支持在线预览。
+     * 支持预览的类型包括：图片（jpg/png/gif等）、文本/代码文件、PDF。
+     *
+     * @param suffix 文件后缀（不含点号）
+     * @return true表示支持预览，false表示不支持
+     */
     public static boolean isPreviewSupported(String suffix) {
         if (suffix == null) {
             return false;

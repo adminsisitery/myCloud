@@ -20,14 +20,21 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import static cn.dev33.satoken.SaManager.log;
 
 /**
- * 全局异常处理器
+ * 全局异常处理器，统一拦截Controller层抛出的异常并返回标准化的Result响应。
+ * 涵盖未登录、业务异常、文件上传超限、参数校验失败及未知异常等场景。
+ *
+ * @author 飞飞
+ * @date 2026/6/27
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
-     * 未登录异常
+     * 处理未登录异常（Sa-Token）
+     *
+     * @param e 未登录异常
+     * @return 401 未授权响应
      */
     @ExceptionHandler(NotLoginException.class)
     public ResponseEntity<Result<Void>> handleNotLoginException(NotLoginException e) {
@@ -41,7 +48,10 @@ public class GlobalExceptionHandler {
 
 
     /**
-     * 业务异常
+     * 处理业务异常，根据错误码映射到对应的HTTP状态码
+     *
+     * @param e 业务异常
+     * @return 对应HTTP状态码的错误响应
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<Void>> handleBusinessException(BusinessException e) {
@@ -58,7 +68,10 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 文件上传大小超限异常
+     * 处理文件上传大小超过限制异常
+     *
+     * @param e 文件上传大小超限异常
+     * @return 413 请求载荷过大响应
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Result<Void>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
@@ -79,7 +92,10 @@ public class GlobalExceptionHandler {
 //    }
 
     /**
-     * 处理 @Valid 参数校验失败异常
+     * 处理 @Valid 注解触发的参数校验失败异常（如请求体DTO校验）
+     *
+     * @param e 方法参数校验异常
+     * @return 400 错误请求响应，包含第一条校验错误信息
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Result<Void>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
@@ -92,7 +108,10 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理 @Validated 方法级参数校验异常
+     * 处理 @Validated 方法级参数校验异常（如Controller方法参数校验）
+     *
+     * @param e 约束违例异常
+     * @return 400 错误请求响应，包含第一条校验错误信息
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Result<Void>> handleConstraintViolation(ConstraintViolationException e) {
@@ -104,8 +123,11 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 其他异常
-     */ 
+     * 兜底处理所有未被上述处理器捕获的异常
+     *
+     * @param e 未知异常
+     * @return 500 服务器内部错误响应
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<Void>> handleException(Exception e) {
         logger.error("Unexpected error: ", e);
@@ -115,7 +137,10 @@ public class GlobalExceptionHandler {
     }
     
     /**
-     * 将业务错误码映射到HTTP状态码
+     * 将业务错误码映射为HTTP状态码，支持精确匹配和范围匹配
+     *
+     * @param errorCode 业务错误码
+     * @return 对应的HTTP状态码
      */
     private HttpStatus mapErrorCodeToHttpStatus(int errorCode) {
         // 基于错误码的范围或特定值进行映射

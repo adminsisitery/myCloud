@@ -7,9 +7,26 @@ import org.mapstruct.Mapping;
 
 import java.time.LocalDateTime;
 
+/**
+ * 功能描述：分享记录映射器，负责分享相关实体与视图对象之间的转换。
+ *
+ * @author 飞飞
+ * @date 2026/06/27
+ */
 @Mapper(componentModel = "spring")
 public interface ShareMapper {
 
+    /**
+     * 功能：将分享参数转换为分享记录实体。
+     *
+     * @param fileId     文件ID
+     * @param userId     用户ID
+     * @param shareCode  分享码
+     * @param password   分享密码
+     * @param expireTime 过期时间
+     * @param now        当前时间
+     * @return 分享记录实体
+     */
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "fileId", source = "fileId")
     @Mapping(target = "userId", source = "userId")
@@ -23,6 +40,16 @@ public interface ShareMapper {
     @Mapping(target = "createTime", expression = "java(java.time.LocalDateTime.now())")
     ShareRecord toShareRecord(Long fileId, Long userId, String shareCode, String password, LocalDateTime expireTime, LocalDateTime now);
 
+    /**
+     * 功能：将分享记录及文件信息转换为分享文件视图对象。
+     *
+     * @param shareRecord 分享记录实体
+     * @param filename    文件名
+     * @param fileSize    文件大小
+     * @param fileId      文件ID
+     * @param isFolder    是否为文件夹
+     * @return 分享文件视图对象
+     */
     @Mapping(target = "shareCode", source = "shareRecord.shareCode")
     @Mapping(target = "expireTime", source = "shareRecord.expireTime")
     @Mapping(target = "visitCount", source = "shareRecord.visitCount")

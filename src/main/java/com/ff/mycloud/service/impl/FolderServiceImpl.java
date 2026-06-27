@@ -32,9 +32,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * @description: TODO 
+ * 文件夹服务实现类
+ * <p>提供文件夹的创建（含合法性校验）和下载打包（ZIP）功能。
+ * 下载时自动处理重名文件，避免ZIP包内路径冲突。</p>
+ *
  * @author 飞飞
- * @date 2026/3/11 15:50
+ * @date 2026/3/11
  * @version 1.0
  */
 
@@ -57,6 +60,14 @@ public class FolderServiceImpl implements FolderService {
         this.fileSearchService = fileSearchService;
     }
 
+    /**
+     * 创建文件夹
+     * <p>校验流程：名称去空格 -> 空值检查 -> 长度限制(30字符) -> 非法字符检查 -> 重名检查 -> 计算本地路径 -> 保存记录。</p>
+     *
+     * @param parentId   父目录ID，为null时在根目录创建
+     * @param folderName 文件夹名称
+     * @return 操作结果
+     */
     @Override
     public Result<String> createFolder(Long parentId, String folderName) {
 
@@ -100,6 +111,15 @@ public class FolderServiceImpl implements FolderService {
         return Result.success("创建成功");
     }
 
+    /**
+     * 下载整个文件夹（打包为ZIP）
+     * <p>流程：校验文件 -> 路径标准化 -> 获取子树 -> 重名文件处理 -> 逐个写入ZIP -> 输出响应流。
+     * 重名文件通过添加(数字)后缀进行区分。</p>
+     *
+     * @param fileId   文件夹ID
+     * @param response HTTP响应对象，用于输出ZIP流
+     * @throws RuntimeException 当IO异常时抛出
+     */
     @Override
     public void downLoadFolder(long fileId, HttpServletResponse response) {
         //检验fileId 用户 文件夹 是否删除
@@ -148,9 +168,11 @@ public class FolderServiceImpl implements FolderService {
 
 
         try {
+            // 设置响应头和内容类型
             response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
             String filename = fileInfo.getFilename();
+            // 处理ZIP文件名：去掉已有的.zip后缀避免重复
             if (!filename.endsWith(".zip")){
                 int lastDotIndex = filename.lastIndexOf(".");
                 // 只有当找到点，且点不在第一位时才截取
@@ -181,6 +203,7 @@ public class FolderServiceImpl implements FolderService {
             ZipEntry zipEntry = new ZipEntry(zipPath);
             zop.putNextEntry(zipEntry);
 
+            // 从OSS下载文件内容并写入ZIP
             String path = info.getPath();
             byte[] files = ossStorageServiceImpl.downloadFile(path);
             if (files!=null&&files.length>0){

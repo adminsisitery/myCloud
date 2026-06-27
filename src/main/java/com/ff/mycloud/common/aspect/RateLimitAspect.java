@@ -36,10 +36,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * @description: TODO 
+ * 限流切面，拦截标注了{@link com.ff.mycloud.common.annotation.RateLimit}注解的方法，
+ * 基于Redisson的RRateLimiter实现分布式限流。支持用户、IP、全局三个维度的组合限流，
+ * 以及限流后的降级处理。
+ *
  * @author 飞飞
- * @date 2026/3/13 21:26
- * @version 1.0
+ * @date 2026/6/27
  */
 
 @Aspect
@@ -55,6 +57,15 @@ public class RateLimitAspect {
         this.redissonClient = redissonClient;
     }
 
+    /**
+     * 环绕通知，对标注了@RateLimit注解的方法进行限流检查。
+     * 根据注解配置的维度逐项检查令牌获取情况，任一维度未获取到令牌则触发限流处理。
+     *
+     * @param joinPoint 切点，用于获取方法信息和参数
+     * @param rateLimit 限流注解实例
+     * @return 原始方法的返回值或降级方法的返回值
+     * @throws Throwable 当限流触发时可能抛出异常或原始方法异常
+     */
     @Around("@annotation(rateLimit)")
     public Object around(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable{
         //先根据切入点获得方法
@@ -158,6 +169,17 @@ public class RateLimitAspect {
         return joinPoint.proceed();
     }
 
+    /**
+     * 处理限流触发后的降级逻辑。优先尝试调用注解中指定的降级方法，
+     * 如果未指定降级方法或调用失败，则抛出注解中指定的异常类型。
+     *
+     * @param joinPoint 切点
+     * @param method    被拦截的方法
+     * @param rateLimit 限流注解
+     * @param dimension 触发限流的维度
+     * @return 降级方法的返回值
+     * @throws Throwable 降级异常
+     */
     private Object handleRateLimitExceeded(ProceedingJoinPoint joinPoint, Method method, RateLimit rateLimit, RateLimit.Dimension dimension) throws Throwable {
         log.warn("触发限流: 维度={}, 方法={}", dimension, method.getName()); // 记录更友好的日志
 
@@ -191,6 +213,15 @@ public class RateLimitAspect {
 
 
 
+    /**
+     * 生成限流Key，格式为：{前缀}:{类名}.{方法名}:{维度}:{标识}
+     *
+     * @param dimension 限流维度
+     * @param method    被拦截的方法
+     * @param userId    用户ID（用户维度时使用）
+     * @param clientIp  客户端IP（IP维度时使用）
+     * @return 限流Key字符串
+     */
     private String generateKey(RateLimit.Dimension dimension, Method method, String userId, String clientIp){
         StringBuilder sb = new StringBuilder(CommonConstants.RateLimit.KEY_PREFIX);
         sb.append(method.getDeclaringClass().getName()).append(".").append(method.getName());

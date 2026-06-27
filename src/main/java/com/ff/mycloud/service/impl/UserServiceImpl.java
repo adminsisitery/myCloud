@@ -32,9 +32,13 @@ import java.util.Random;
 import static com.ff.mycloud.enums.ErrorCode.*;
 
 /**
- * @description: TODO 
+ * 用户服务实现类
+ * <p>提供用户登录、注册、登出、角色管理等核心业务逻辑。
+ * 登录采用三层防护机制（限流、IP计数、账户渐进退避+硬锁），
+ * 注册包含验证码校验、用户创建、空间初始化和角色绑定。</p>
+ *
  * @author 飞飞
- * @date 2026/1/11 21:57
+ * @date 2026/1/11
  * @version 1.0
  */
 
@@ -64,8 +68,19 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 登录
-     * 三层防护：@RateLimit 限流 → IP维度计数 → 账户维度渐进退避+硬锁
+     * 用户登录
+     * <p>三层防护：@RateLimit 限流 → IP维度计数 → 账户维度渐进退避+硬锁。
+     * 执行流程：
+     * 1. 获取客户端IP
+     * 2. 查询用户是否存在（用于获取userId做账户维度计数）
+     * 3. 双维度Lua原子判断是否已被锁定
+     * 4. 验证用户名存在性
+     * 5. 验证密码正确性
+     * 6. 验证账号状态
+     * 7. 登录成功：清除失败记录，签发token</p>
+     *
+     * @param loginDTO 登录请求参数（用户名和密码）
+     * @return 登录成功返回的token
      */
     @Override
     public String login(LoginDTO loginDTO) {
@@ -107,12 +122,24 @@ public class UserServiceImpl implements UserService {
         // ⑥ 登录成功，清除失败记录
         loginFailRedis.reset(user.getId(), ip);
 
+        // 签发token并登录
         StpUtil.login(user.getId());
         String token = StpUtil.getTokenValue();
         logger.info("登录成功，用户名：{}，token：{} id{}", loginDTO.getUsername(), token, UserContext.getCurrentUserId());
         return token;
     }
 
+    /**
+     * 用户注册
+     * <p>注册流程：
+     * 1. 检查用户名和邮箱是否已被注册
+     * 2. 校验邮箱验证码
+     * 3. 创建用户记录
+     * 4. 初始化用户中心信息（空间配额）
+     * 5. 绑定默认角色</p>
+     *
+     * @param registerDTO 注册请求参数
+     */
     @Override
     public void register(RegisterDTO registerDTO) {
         //查看用户是否注册
@@ -149,6 +176,13 @@ public class UserServiceImpl implements UserService {
         //为用户绑定角色
         addRole(user.getId(), CommonConstants.UserRole.USER_ID);
     }
+
+    /**
+     * 发送邮箱验证码
+     * <p>流程：检查邮箱是否已被注册 -> 生成6位数字验证码 -> 发送邮件 -> 存入Redis。</p>
+     *
+     * @param email 目标邮箱地址
+     */
     @Override
     public void sendVerificationCode(@NotBlank @Email String email) {
         //检查邮箱是否注册
@@ -172,11 +206,23 @@ public class UserServiceImpl implements UserService {
         //保存到redis
         verificationCodeRedis.saveVerificationCode(email, code);
     }
+
+    /**
+     * 用户登出
+     * <p>校验当前用户是否已登录，已登录则执行Sa-Token登出。</p>
+     */
     @Override
     public void logout() {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN);
         StpUtil.logout();
     }
+
+    /**
+     * 强制下线指定用户
+     * <p>用于管理员踢出指定用户，需要操作者已登录。</p>
+     *
+     * @param userId 要强制下线的用户ID
+     */
     @Override
     public void forceLogout(Long userId) {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN, "操作者未登录");
@@ -184,11 +230,22 @@ public class UserServiceImpl implements UserService {
         StpUtil.logout(userId);
     }
 
+    /**
+     * 为用户添加角色
+     *
+     * @param userId 用户ID
+     * @param roleId 角色ID
+     */
     @Override
     public void addRole(Long userId, Long roleId) {
         userMapperService.SetUserRole(userId,roleId);
     }
 
+    /**
+     * 修改用户角色
+     *
+     * @param userRole 用户角色实体
+     */
     @Override
     public void changeUserRole(UserRole userRole) {
         userMapperService.updataUserRole(userRole);
