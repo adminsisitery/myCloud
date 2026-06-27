@@ -221,7 +221,9 @@ public class ShareController {
         // 2. 验证 token（如果有密码）
         if (StringUtil.isNotBlank(shareRecord.getPassword())) {
             // 这里复用你现有的 token 验证逻辑
-            shareServiceImpl.validateShareToken(shareCode, token);
+            if (!shareServiceImpl.validateShareToken(shareCode, token)) {
+                throw new BusinessException(ErrorCode.INVALID_TOKEN);
+            }
         }
 
         // 3. 验证是否过期

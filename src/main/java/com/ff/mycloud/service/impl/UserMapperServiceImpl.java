@@ -47,7 +47,7 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
             return Optional.empty();
         }
         return lambdaQuery()
-                .eq(User::getUsername, email.trim())
+                .eq(User::getEmail, email.trim())
                 .oneOpt();
     }
 
