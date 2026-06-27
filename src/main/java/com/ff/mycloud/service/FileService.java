@@ -26,8 +26,6 @@ public interface FileService {
 
     void deleteFile(Long fileId);
 
-    List<FileListVO> searchFiles(String keyword);
-
     byte[] getFileContent(Long id);
 
     InputStream getFile(String path);

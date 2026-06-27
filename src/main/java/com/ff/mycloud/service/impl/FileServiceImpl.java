@@ -1,6 +1,5 @@
 package com.ff.mycloud.service.impl;
 
-//import com.ff.mycloud.ES.FileSearchRepository;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
@@ -13,6 +12,7 @@ import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.*;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
+import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
@@ -47,8 +47,7 @@ public class FileServiceImpl implements FileService {
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
     UserCenterMapperService userCenterMapperService;
-//    FileSearchService fileSearchService;
-//    FileSearchRepository searchRepository;
+    RabbitMqService rabbitMqService;
 
     public FileServiceImpl(StorageServiceFactory storageServiceFactory,
                            UserCenterMapperService userCenterMapperService,
@@ -57,8 +56,7 @@ public class FileServiceImpl implements FileService {
                            UserContext userContext,
                            UserMapperServiceImpl userMapperServiceImpl,
                            UpLoadProgressService upLoadProgressService,
-//                           ,FileSearchService fileSearchService,
-//                           FileSearchRepository searchRepository
+                           RabbitMqService rabbitMqService,
                            FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
@@ -67,8 +65,7 @@ public class FileServiceImpl implements FileService {
         this.userMapperServiceImpl = userMapperServiceImpl;
         this.upLoadProgressService = upLoadProgressService;
         this.userCenterMapperService = userCenterMapperService;
-//        this.fileSearchService = fileSearchService;
-//        this.searchRepository = searchRepository;
+        this.rabbitMqService = rabbitMqService;
         this.fileObjectMapper = fileObjectMapper;
         this.healthHttpCodeStatusMapper = healthHttpCodeStatusMapper;
     }
@@ -197,13 +194,13 @@ public class FileServiceImpl implements FileService {
         // todo 上传完成保存文件的分片hash信息
 
         createSample(file,fileObject);
-//        //上传完成 同步ES
-//        FileDocument fileDocument = new FileDocument();
-//        fileDocument.setId(fileInfo.getId());
-//        fileDocument.setFileName(fileInfo.getFilename()+ "." + fileInfo.getFileSuffix());
-//        fileDocument.setFileType(fileInfo.getFileType());
-//        fileDocument.setUserId(currentUserId);
-//        searchRepository.save(fileDocument);
+        //上传完成 异步同步ES
+        FileDocument fileDocument = new FileDocument();
+        fileDocument.setId(fileInfo.getId());
+        fileDocument.setFileName(fileInfo.getFilename()+ "." + fileInfo.getFileSuffix());
+        fileDocument.setFileType(fileInfo.getFileType());
+        fileDocument.setUserId(currentUserId);
+        rabbitMqService.sendInsertMessage(fileDocument);
     }
 
     private void createSample(File file, FileObject fileObject) {
@@ -243,11 +240,11 @@ public class FileServiceImpl implements FileService {
         fileInfo.setUpdatedAt(LocalDateTime.now());
         fileInfoMapperService.updateById(fileInfo);
 //
-//        //直接调用删改名传入id和名字就行
-//        if (!fileInfo.getIsFolder()) {
-//            fileSearchService.renameById(fileId, fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
-//        }
-//        fileSearchService.renameById(fileId, newFilename);
+        //异步同步ES重命名
+        FileDocument fd = new FileDocument();
+        fd.setId(fileId);
+        fd.setFileName(fileInfo.getIsFolder() ? newFilename : newFilename + "." + fileInfo.getFileSuffix());
+        rabbitMqService.sendUpdateMessage(fd);
     }
 
     public void deleteSimpleFile(Long fileId) {
@@ -432,8 +429,10 @@ public class FileServiceImpl implements FileService {
             file.setIsDeleted(true);
             file.setUpdatedAt(LocalDateTime.now());
             fileInfoMapperService.updateById(file);
-//            //直接调用删除 ES删掉就行
-//            fileSearchService.del(fileId);
+            //异步同步ES删除
+            FileDocument fd = new FileDocument();
+            fd.setId(file.getId());
+            rabbitMqService.sendDeleteMessage(fd);
 
             // 物理删除（仅文件需要，且仅当无引用时）
             if (!file.getIsFolder()) {
@@ -465,17 +464,6 @@ public class FileServiceImpl implements FileService {
         userCenterMapperService.updateById(user);
         log.info("删除完成：共释放空间{}字节，用户{}当前已用空间{}",
                 totalSize, currentUserId, newUsedSpace);
-    }
-
-//    @Override
-//    public List<FileListVO> searchFiles(String keyword) {
-//        List<FileInfo> fileInfos = fileSearchService.searchFile(keyword);
-//        return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
-//    }
-    @Override
-    public List<FileListVO> searchFiles(String keyword) {
-        List<FileInfo> fileInfos = fileInfoMapperService.findBykeyWord(keyword, UserContext.getCurrentUserId());
-        return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
     @Override
@@ -534,13 +522,13 @@ public class FileServiceImpl implements FileService {
         // 保存新的文件记录
 //        return fileInfoRepository.save(newFileInfo);
         fileInfoMapperService.save(newFileInfo);
-//        //保存到ES
-//        FileDocument fileDocument = new FileDocument();
-//        fileDocument.setId(newFileInfo.getId());
-//        fileDocument.setFileName(newFileInfo.getFilename()+ "." + newFileInfo.getFileSuffix());
-//        fileDocument.setFileType(newFileInfo.getFileType());
-//        fileDocument.setUserId(UserContext.getCurrentUserId());
-//        searchRepository.save(fileDocument);
+        //异步同步ES
+        FileDocument fileDocument = new FileDocument();
+        fileDocument.setId(newFileInfo.getId());
+        fileDocument.setFileName(newFileInfo.getFilename()+ "." + newFileInfo.getFileSuffix());
+        fileDocument.setFileType(newFileInfo.getFileType());
+        fileDocument.setUserId(UserContext.getCurrentUserId());
+        rabbitMqService.sendInsertMessage(fileDocument);
         return newFileInfo;
     }
 

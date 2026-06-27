@@ -103,3 +103,8 @@ mybatis-plus:
   mapper-locations: classpath:mapper/**/*.xml
   type-aliases-package: com.ff.mycloud.model.entity
 
+
+#文件搜索是使用 ES 还是 Mysql -> Like
+#  Mysql / ES
+File:
+  search: Mysql

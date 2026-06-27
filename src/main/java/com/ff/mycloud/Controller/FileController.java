@@ -2,6 +2,8 @@ package com.ff.mycloud.Controller;
 
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.handler.FileSearchHandler;
+import com.ff.mycloud.handler.MySQLFileSearchHandler;
 import com.ff.mycloud.model.dto.FileRenameDTO;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.vo.FileCheckVO;
@@ -33,10 +35,12 @@ public class FileController {
 
     private final FileService fileService;
     private final FileUploadTaskService fileUploadTaskService;
+    private final FileSearchHandler fileSearchHandler;
 
-    public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService) {
+    public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService, FileSearchHandler fileSearchHandler) {
         this.fileService = fileService;
         this.fileUploadTaskService = fileUploadTaskService;
+        this.fileSearchHandler = fileSearchHandler;
     }
 
     @GetMapping
@@ -83,7 +87,7 @@ public class FileController {
     @GetMapping("/search")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 1000)
     public Result<List<FileListVO>> searchFiles(@RequestParam String keyword) {
-        return Result.success(fileService.searchFiles(keyword));
+        return Result.success(fileSearchHandler.searchFiles(keyword));
     }
 
     @PostMapping("/check")
