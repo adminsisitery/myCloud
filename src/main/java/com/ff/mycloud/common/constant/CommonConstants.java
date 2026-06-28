@@ -23,6 +23,10 @@ public class CommonConstants {
     public static class File {
         public static final String SLASH = "/";
         public static final String FILE_PATH_PREFIX = "user_";
+        /**
+         * 大文件标准 500mb
+         */
+        public static final long BIGFILE = 500000;
     }
     
     /**
@@ -87,6 +91,14 @@ public class CommonConstants {
         public static final String EXCHANGE = "log.topic";
         public static final String QUEUE = "log.queue";
         public static final String KEY = "operation_log";
+    }
+
+
+    /**
+     * 文件分片上传
+     */
+    public static class ChunkUpload {
+        public static final String KEY_PREFIX = "chunk:upload:";
     }
 
 } 

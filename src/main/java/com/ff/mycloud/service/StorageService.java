@@ -62,4 +62,11 @@ public interface StorageService {
      */
     InputStream getFile(String path);
 
+    /**
+     * 初始化OSS分片上传
+     *
+     * @param objectKey OSS对象路径（目录+文件名）
+     * @return OSS返回的uploadId，用于后续uploadPart/completeMultipartUpload
+     */
+    String initiateMultipartUpload(String objectKey);
 }

@@ -557,7 +557,6 @@ public class FileServiceImpl implements FileService {
     private String getUploadPath(Long parentId, User currentUser) {
         //1.如果没有传入父路径的情况
         String path = CommonConstants.File.FILE_PATH_PREFIX + currentUser.getId();
-
         return path;
     }
 

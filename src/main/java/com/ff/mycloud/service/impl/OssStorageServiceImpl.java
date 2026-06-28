@@ -46,14 +46,9 @@ public class OssStorageServiceImpl implements StorageService {
     OssProProperties ossProProperties;
     FileInfoMapperService fileInfoMapperService;
 
-    /**
-     * 构造函数，注入依赖
-     *
-     * @param ossProProperties      OSS配置属性
-     * @param upLoadProgressService 上传进度服务
-     * @param fileInfoMapperService 文件信息数据库服务
-     */
-    public OssStorageServiceImpl(OssProProperties ossProProperties, UpLoadProgressService upLoadProgressService, FileInfoMapperService fileInfoMapperService) {
+    public OssStorageServiceImpl(OssProProperties ossProProperties,
+                                 UpLoadProgressService upLoadProgressService,
+                                 FileInfoMapperService fileInfoMapperService) {
         this.ossProProperties = ossProProperties;
         this.upLoadProgressService = upLoadProgressService;
         this.fileInfoMapperService = fileInfoMapperService;
@@ -251,6 +246,7 @@ public class OssStorageServiceImpl implements StorageService {
             }
         };
     }
+
 /**
  * 处理上传错误，记录日志并更新任务状态为失败
  *
@@ -343,7 +339,7 @@ private void closeOssClient(OSS ossClient) {
         Date date = new Date(System.currentTimeMillis() + expirySeconds * 1000L);
         OSS ossClient = getOssClient();
         GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(ossProProperties.getBucketName(), objectKey);
-        request.setMethod(com.aliyun.oss.HttpMethod.GET);
+        request.setMethod(HttpMethod.GET);
         request.setExpiration(date);
 
         Map<String, String> queryParams = new HashMap<>();
@@ -393,6 +389,24 @@ private void closeOssClient(OSS ossClient) {
             if (ossClient != null) {
                 ossClient.shutdown();
             }
+        }
+    }
+
+
+    /**
+     * 初始化OSS分片上传，返回uploadId
+     */
+    @Override
+    public String initiateMultipartUpload(String objectKey) {
+        OSS ossClient = null;
+        try {
+            ossClient = getOssClient();
+            InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(
+                    ossProProperties.getBucketName(), objectKey);
+            InitiateMultipartUploadResult result = ossClient.initiateMultipartUpload(request);
+            return result.getUploadId();
+        } finally {
+            closeOssClient(ossClient);
         }
     }
 }
