@@ -618,9 +618,15 @@ public class FileServiceImpl implements FileService {
             FileCheckVO build = FileCheckVO.builder().exists(false).build();
             return Result.success(build);
         }
+        //增加size判断 避免假秒传（hash碰撞或前端篡改fileSize）
+        FileInfo existingFile = byHashAndUserId.get(0);
+        if (!fileCheck.getFileSize().equals(existingFile.getFileSize())) {
+            //不是秒传
+            FileCheckVO build = FileCheckVO.builder().exists(false).build();
+            return Result.success(build);
+        }
         //存在就秒传
         FileCheckVO fvo = FileCheckVO.builder().exists(true).build();
-        //todo :文件秒传设置用户已用容量 -> 文件预站 -> 文件失败 -> 释放空间
 
         //创建新的数据库记录
 //        FileInfo fileInfo = byHashAndUserId.get(0);
