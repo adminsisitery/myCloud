@@ -7,6 +7,7 @@ import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
  * @date 2026/3/14
  */
 @Component
+@ConditionalOnProperty(prefix = "file", name = "search", havingValue = "ES")
 public class ESSyncConsumer {
 
     private final FileSearchService fileSearchService;

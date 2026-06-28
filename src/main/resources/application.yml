@@ -4,10 +4,17 @@ server:
 spring:
   application:
     name: cloud-drive
-  elasticsearch:
-    uris: http://localhost:9200
-    username: elastic
-    password: 123456
+  # ===== ES 暂未启用 =====
+  # elasticsearch:
+  #   uris: http://localhost:9200
+  #   username: elastic
+  #   password: 123456
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
   rabbitmq:
     host: 47.95.192.221
     port: 5672

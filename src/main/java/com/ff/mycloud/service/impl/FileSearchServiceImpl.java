@@ -7,6 +7,7 @@ import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.repositorys.FileInfoMapper;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.FileSearchService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.List;
  * @version 1.0
  */
 @Service
+@ConditionalOnProperty(prefix = "file", name = "search", havingValue = "ES")
 public class FileSearchServiceImpl implements FileSearchService {
 
     FileSearchRepository fileSearchRepository;

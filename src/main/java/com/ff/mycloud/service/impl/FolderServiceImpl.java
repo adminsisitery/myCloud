@@ -11,7 +11,6 @@ import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.service.FileInfoMapperService;
-import com.ff.mycloud.service.FileSearchService;
 import com.ff.mycloud.service.FolderService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -48,16 +47,13 @@ public class FolderServiceImpl implements FolderService {
     FileInfoMapperService fileInfoMapperService;
     FileMapper fileMapper;
     OssStorageServiceImpl ossStorageServiceImpl;
-    FileSearchService fileSearchService;
 
     public FolderServiceImpl(FileInfoMapperService fileInfoMapperService,
                              FileMapper fileMapper,
-                             OssStorageServiceImpl ossStorageServiceImpl,
-                             FileSearchService fileSearchService) {
+                             OssStorageServiceImpl ossStorageServiceImpl) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
         this.ossStorageServiceImpl = ossStorageServiceImpl;
-        this.fileSearchService = fileSearchService;
     }
 
     /**
