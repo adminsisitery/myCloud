@@ -8,6 +8,7 @@ import com.aliyun.oss.event.ProgressEventType;
 import com.aliyun.oss.event.ProgressListener;
 import com.aliyun.oss.model.*;
 import com.ff.mycloud.common.constant.CommonConstants;
+import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.config.properties.OssProProperties;
 import com.ff.mycloud.enums.ErrorCode;
@@ -405,6 +406,29 @@ private void closeOssClient(OSS ossClient) {
                     ossProProperties.getBucketName(), objectKey);
             InitiateMultipartUploadResult result = ossClient.initiateMultipartUpload(request);
             return result.getUploadId();
+        } finally {
+            closeOssClient(ossClient);
+        }
+    }
+
+    /**
+     * 上传单个分片到OSS
+     */
+    @Override
+    public String uploadPart(String objectKey, String ossUploadId, int partNumber,
+                             java.io.InputStream inputStream, long partSize) {
+        OSS ossClient = null;
+        try {
+            ossClient = getOssClient();
+            UploadPartRequest uploadPartRequest = new UploadPartRequest(
+                    ossProProperties.getBucketName(),
+                    objectKey,
+                    ossUploadId,
+                    partNumber,
+                    inputStream,
+                    partSize);
+            UploadPartResult result = ossClient.uploadPart(uploadPartRequest);
+            return result.getPartETag().getETag();
         } finally {
             closeOssClient(ossClient);
         }

@@ -69,4 +69,16 @@ public interface StorageService {
      * @return OSS返回的uploadId，用于后续uploadPart/completeMultipartUpload
      */
     String initiateMultipartUpload(String objectKey);
+
+    /**
+     * 上传单个分片到OSS
+     *
+     * @param objectKey   OSS对象Key
+     * @param ossUploadId OSS MultipartUpload ID
+     * @param partNumber  分片编号（从1开始）
+     * @param inputStream 分片数据流
+     * @param partSize    分片大小（字节）
+     * @return 分片的ETag值
+     */
+    String uploadPart(String objectKey, String ossUploadId, int partNumber, InputStream inputStream, long partSize);
 }

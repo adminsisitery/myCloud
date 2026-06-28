@@ -99,6 +99,7 @@ public class CommonConstants {
      */
     public static class ChunkUpload {
         public static final String KEY_PREFIX = "chunk:upload:";
+        public static final String KEY_PARTS = ":parts";
     }
 
 } 

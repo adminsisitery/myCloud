@@ -2,6 +2,7 @@ package com.ff.mycloud.Controller;
 
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
+import com.ff.mycloud.model.vo.ChunkPartVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.service.ChunkUploadService;
 import org.springframework.web.bind.annotation.*;
@@ -38,11 +39,10 @@ public class BigFileController {
      * @return 上传结果
      */
     @PostMapping("/upload")
-    public Result<?> upload(@RequestParam("uploadId") String uploadId,
-                            @RequestParam("partNumber") Integer partNumber,
-                            @RequestParam("chunk") MultipartFile chunk) {
-        // TODO: Day 32
-        return Result.success();
+    public Result<ChunkPartVO> upload(@RequestParam("uploadId") String uploadId,
+                                       @RequestParam("partNumber") Integer partNumber,
+                                       @RequestParam("chunk") MultipartFile chunk) {
+        return chunkUploadService.uploadPart(uploadId, partNumber, chunk);
     }
 
     /**

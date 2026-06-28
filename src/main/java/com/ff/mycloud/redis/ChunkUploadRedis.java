@@ -12,6 +12,9 @@ import java.time.Duration;
 @Component
 public class ChunkUploadRedis {
 
+    private static final String KEY_PREFIX = CommonConstants.ChunkUpload.KEY_PREFIX;
+    private static final String KEY_PARTS = CommonConstants.ChunkUpload.KEY_PARTS;
+
     /** 分片任务 TTL：7天 */
     private static final long TASK_TTL_DAYS = 7;
 
@@ -25,7 +28,7 @@ public class ChunkUploadRedis {
      * 保存分片上传任务到Redis
      */
     public void saveTask(ChunkTask chunkTask) {
-        RBucket<ChunkTask> bucket = redisClient.getBucket(CommonConstants.ChunkUpload.KEY_PREFIX + chunkTask.getUploadId());
+        RBucket<ChunkTask> bucket = redisClient.getBucket(KEY_PREFIX + chunkTask.getUploadId());
         bucket.set(chunkTask, Duration.ofDays(TASK_TTL_DAYS));
     }
 
@@ -33,7 +36,7 @@ public class ChunkUploadRedis {
      * 获取分片上传任务
      */
     public ChunkTask getTask(String uploadId) {
-        RBucket<ChunkTask> bucket = redisClient.getBucket(CommonConstants.ChunkUpload.KEY_PREFIX + uploadId);
+        RBucket<ChunkTask> bucket = redisClient.getBucket(KEY_PREFIX + uploadId);
         return bucket.get();
     }
 
@@ -41,7 +44,25 @@ public class ChunkUploadRedis {
      * 删除分片上传任务
      */
     public void deleteTask(String uploadId) {
-        redisClient.getKeys().delete(CommonConstants.ChunkUpload.KEY_PREFIX + uploadId);
+        redisClient.getKeys().delete(KEY_PREFIX + uploadId);
     }
 
+    /**
+     * 判断分片是否已上传完成
+     */
+    public boolean isPartUploaded(String uploadId, int partNumber) {
+        return redisClient.getBucket(KEY_PREFIX + uploadId + KEY_PARTS + partNumber).isExists();
+    }
+
+    /**
+     * 记录分片完成并保存 ETag
+     *
+     * @param uploadId   自定义上传ID
+     * @param partNumber 分片编号
+     * @param eTag       分片ETag（用于最终合并）
+     */
+    public void savePartETag(String uploadId, int partNumber, String eTag) {
+        RBucket<String> bucket = redisClient.getBucket(KEY_PREFIX + uploadId + KEY_PARTS + partNumber);
+        bucket.set(eTag);
+    }
 }
