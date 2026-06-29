@@ -286,6 +286,87 @@ public class FileServiceImpl implements FileService {
     }
 
     /**
+     * 移动文件/文件夹到新的父目录
+     * <p>流程：校验源文件 -> 校验目标目录 -> 防循环嵌套 -> 更新parentId + localFilePath -> 递归更新子节点。</p>
+     *
+     * @param fileId         文件ID
+     * @param targetParentId 目标父目录ID，null或0为根目录
+     * @throws BusinessException 当文件不存在、无权限、目标不是文件夹、循环嵌套时抛出
+     */
+    @Override
+    public void moveFile(Long fileId, Long targetParentId) {
+        Long currentUserId = UserContext.getCurrentUserId();
+
+        // 1. 校验源文件存在且属于当前用户
+        FileInfo file = fileInfoMapperService.findByIdAndUserId(fileId, currentUserId);
+        ExceptionUtil.throwIfNull(file, ErrorCode.FILE_NOT_FOUND);
+
+        // 2. 解析目标父目录（null/0 = 根目录）
+        String newPathPrefix;
+        if (targetParentId != null && targetParentId != 0) {
+            FileInfo targetParent = fileInfoMapperService.findByIdAndUserId(targetParentId, currentUserId);
+            ExceptionUtil.throwIfNull(targetParent, ErrorCode.FILE_NOT_FOUND);
+            if (targetParent.getIsFolder() == null || !targetParent.getIsFolder()) {
+                throw new BusinessException(ErrorCode.FOLDER_NOT_EMPTY, "目标不是文件夹");
+            }
+            newPathPrefix = targetParent.getLocalFilePath();
+            // 确保以 / 结尾
+            if (!newPathPrefix.endsWith("/")) {
+                newPathPrefix = newPathPrefix + "/";
+            }
+
+            // 3. 防循环嵌套：文件夹不能移动到自己的子孙节点下
+            if (file.getIsFolder() != null && file.getIsFolder()) {
+                String sourcePath = file.getLocalFilePath();
+                String targetPath = targetParent.getLocalFilePath();
+                if (targetPath.startsWith(sourcePath)) {
+                    throw new BusinessException(ErrorCode.CANNOT_MOVE_INTO_OWN_SUBTREE);
+                }
+            }
+        } else {
+            newPathPrefix = "";
+            targetParentId = null;
+        }
+
+        // 4. 计算新的 localFilePath
+        String oldPathPrefix = file.getLocalFilePath();
+        String newFilePath;
+        if (file.getIsFolder() != null && file.getIsFolder()) {
+            newFilePath = newPathPrefix + file.getFilename() + "/";
+        } else {
+            String fullName = file.getFilename();
+            if (file.getFileSuffix() != null && !file.getFileSuffix().isEmpty()) {
+                fullName = fullName + "." + file.getFileSuffix();
+            }
+            newFilePath = newPathPrefix + fullName;
+        }
+
+        // 5. 更新根节点
+        file.setParentId(targetParentId);
+        file.setLocalFilePath(newFilePath);
+        file.setUpdatedAt(LocalDateTime.now());
+        fileInfoMapperService.updateById(file);
+
+        // 6. 文件夹：递归更新所有子节点的 localFilePath（前缀替换）
+        if (file.getIsFolder() != null && file.getIsFolder()) {
+            // getSubTree 查的是 isDeleted=false 的节点
+            List<FileInfo> children = fileInfoMapperService.getSubTree(oldPathPrefix, currentUserId);
+            for (FileInfo child : children) {
+                if (child.getId().equals(fileId)) continue;
+                String oldChildPath = child.getLocalFilePath();
+                if (oldChildPath != null && oldChildPath.startsWith(oldPathPrefix)) {
+                    String relativePart = oldChildPath.substring(oldPathPrefix.length());
+                    child.setLocalFilePath(newFilePath + relativePart);
+                    child.setUpdatedAt(LocalDateTime.now());
+                    fileInfoMapperService.updateById(child);
+                }
+            }
+        }
+
+        log.info("移动成功: fileId={}, oldPath={}, newPath={}", fileId, oldPathPrefix, newFilePath);
+    }
+
+    /**
      * 重命名文件
      * <p>流程：校验新文件名 -> 查询文件存在 -> 去除文件名中的后缀 -> 更新数据库 -> MQ异步同步ES重命名 + 操作日志。</p>
      *

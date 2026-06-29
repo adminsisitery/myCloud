@@ -5,6 +5,7 @@ import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.handler.FileSearchHandler;
 import com.ff.mycloud.handler.MySQLFileSearchHandler;
 import com.ff.mycloud.model.dto.FileRenameDTO;
+import com.ff.mycloud.model.dto.MoveFileDTO;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
@@ -145,6 +146,24 @@ public class FileController {
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> deleteFile(@PathVariable Long fileId) {
         fileService.deleteFile(fileId);
+        return Result.success();
+    }
+
+    /**
+     * 移动文件/文件夹
+     * <p>
+     * 将文件或文件夹移动到新的父目录下，更新 parentId 和 localFilePath。
+     * 文件夹会递归更新所有子节点的路径。
+     * </p>
+     *
+     * @param fileId 文件ID
+     * @param dto    包含目标父目录ID的 DTO
+     * @return 操作结果
+     */
+    @PatchMapping("/{fileId}/move")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> moveFile(@PathVariable Long fileId, @RequestBody MoveFileDTO dto) {
+        fileService.moveFile(fileId, dto.getTargetParentId());
         return Result.success();
     }
 

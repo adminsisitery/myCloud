@@ -74,6 +74,15 @@ public interface FileService {
     void renameFile(Long fileId, @NotBlank(message = "新文件名不能为空") @Size(max = 50, message = "新文件名不能超过50个字符") String newFilename);
 
     /**
+     * 移动文件或文件夹到新的父目录
+     * <p>更新 parentId 和 localFilePath，文件夹会递归更新所有子节点路径。</p>
+     *
+     * @param fileId         文件ID
+     * @param targetParentId 目标父目录ID，null或0为根目录
+     */
+    void moveFile(Long fileId, Long targetParentId);
+
+    /**
      * 删除文件或文件夹
      * <p>如果是文件夹则递归删除所有子节点，文件则判断秒传引用后再物理删除。</p>
      *
