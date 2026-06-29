@@ -2,6 +2,7 @@ package com.ff.mycloud.service;
 
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
+import com.ff.mycloud.model.vo.ChunkCompleteVO;
 import com.ff.mycloud.model.vo.ChunkPartVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,5 +21,5 @@ public interface ChunkUploadService {
      */
     Result<ChunkPartVO> uploadPart(String uploadId, Integer partNumber, MultipartFile chunk);
 
-    Result<String> completeChunk(String uploadId);
+    Result<ChunkCompleteVO> completeChunk(String uploadId);
 }

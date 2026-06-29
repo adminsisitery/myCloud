@@ -8,6 +8,7 @@ import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.ChunkUploadMapper;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.*;
+import com.ff.mycloud.model.vo.ChunkCompleteVO;
 import com.ff.mycloud.model.vo.ChunkPartVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.redis.ChunkUploadRedis;
@@ -121,7 +122,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
     }
 
     @Override
-    public Result<String> completeChunk(String uploadId) {
+    public Result<ChunkCompleteVO> completeChunk(String uploadId) {
         // 1. 取出上传任务
         ChunkTask task = chunkUploadRedis.getTask(uploadId);
         if (task == null) {
@@ -178,6 +179,9 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 8. 清理 Redis
         chunkUploadRedis.deleteTask(uploadId);
 
-        return Result.success("上传成功");
+        // 9. 返回文件信息
+        return Result.success(new ChunkCompleteVO(
+                fileInfo.getId(), originalFilename,
+                task.getFileSize(), objectKey, suffix));
     }
 }

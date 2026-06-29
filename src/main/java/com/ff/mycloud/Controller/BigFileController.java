@@ -2,6 +2,7 @@ package com.ff.mycloud.Controller;
 
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
+import com.ff.mycloud.model.vo.ChunkCompleteVO;
 import com.ff.mycloud.model.vo.ChunkPartVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.service.ChunkUploadService;
@@ -52,9 +53,8 @@ public class BigFileController {
      * @return 合并后的文件信息
      */
     @PostMapping("/complete")
-    public Result<?> complete(@RequestParam("uploadId") String uploadId) {
-        chunkUploadService.completeChunk(uploadId);
-        return Result.success();
+    public Result<ChunkCompleteVO> complete(@RequestParam("uploadId") String uploadId) {
+        return chunkUploadService.completeChunk(uploadId);
     }
 
     /**
