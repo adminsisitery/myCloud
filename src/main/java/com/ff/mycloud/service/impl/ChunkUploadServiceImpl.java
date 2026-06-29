@@ -80,6 +80,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         chunkTask.setUserId(currentUserId);
         chunkTask.setSpacePreAllocated(true);
         chunkTask.setCreatedAt(System.currentTimeMillis());
+        chunkTask.setLastActivityTime(System.currentTimeMillis());
         chunkUploadRedis.saveTask(chunkTask);
 
         return Result.success(new ChunkVO(uploadId, ossUploadId));
@@ -108,9 +109,11 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
                     chunk.getInputStream(),
                     chunk.getSize());
 
-            // 4. 记录分片 ETag + 标记位图
+            // 4. 记录分片 ETag + 标记位图 + 刷新活动时间
             chunkUploadRedis.savePartETag(uploadId, partNumber, eTag);
             chunkUploadRedis.markPartDone(uploadId, partNumber);
+            task.setLastActivityTime(System.currentTimeMillis());
+            chunkUploadRedis.saveTask(task);
 
             ChunkPartVO vo = new ChunkPartVO();
             vo.setUploadId(uploadId);

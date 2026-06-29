@@ -30,4 +30,6 @@ public class ChunkTask {
     private Boolean spacePreAllocated;
     /** 创建时间戳（毫秒） */
     private Long createdAt;
+    /** 最近一次活动时间戳（毫秒），每次上传分片时更新，用于超时判断 */
+    private Long lastActivityTime;
 }

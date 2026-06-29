@@ -120,6 +120,20 @@ public class ChunkUploadRedis {
         }
     }
 
+    /**
+     * 扫描所有 chunk upload 任务 ID（仅主任务 key，排除 :progress 和 :parts）
+     */
+    public List<String> scanAllTaskIds() {
+        List<String> taskIds = new ArrayList<>();
+        for (String key : redisClient.getKeys().getKeysByPattern(KEY_PREFIX + "*")) {
+            if (key.contains(":progress") || key.contains(KEY_PARTS)) {
+                continue;
+            }
+            taskIds.add(key.substring(KEY_PREFIX.length()));
+        }
+        return taskIds;
+    }
+
     public List<Integer> getCompleteParts(String uploadId, Integer totalParts) {
         List<Integer> complete = new ArrayList<>();
         var bitmap = redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress");

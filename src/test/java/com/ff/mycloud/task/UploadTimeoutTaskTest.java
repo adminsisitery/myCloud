@@ -2,8 +2,11 @@ package com.ff.mycloud.task;
 
 import com.ff.mycloud.enums.UploadTaskStatus;
 import com.ff.mycloud.model.entity.UploadTask;
+import com.ff.mycloud.redis.ChunkUploadRedis;
 import com.ff.mycloud.redis.UploadProgressRedis;
+import com.ff.mycloud.service.StorageServiceFactory;
 import com.ff.mycloud.service.UpLoadProgressService;
+import com.ff.mycloud.service.UserCenterMapperService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,9 @@ class UploadTimeoutTaskTest {
 
     @Mock private UploadProgressRedis uploadProgressRedis;
     @Mock private UpLoadProgressService upLoadProgressService;
+    @Mock private ChunkUploadRedis chunkUploadRedis;
+    @Mock private StorageServiceFactory storageServiceFactory;
+    @Mock private UserCenterMapperService userCenterMapperService;
 
     private UploadTimeoutTask task;
 
@@ -32,7 +38,8 @@ class UploadTimeoutTaskTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        task = new UploadTimeoutTask(uploadProgressRedis, upLoadProgressService);
+        task = new UploadTimeoutTask(uploadProgressRedis, upLoadProgressService,
+                chunkUploadRedis, storageServiceFactory, userCenterMapperService);
     }
 
     // ==================== 正常流程 ====================
