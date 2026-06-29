@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
 import com.ff.mycloud.model.vo.ChunkCompleteVO;
@@ -28,6 +29,7 @@ public class BigFileController {
      * @return 包含自定义uploadId和OSS uploadId的结果
      */
     @PostMapping("/init")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
     public Result<ChunkVO> init(@RequestBody ChunkFile chunkFile) {
         return chunkUploadService.initUpload(chunkFile);
     }
@@ -41,6 +43,7 @@ public class BigFileController {
      * @return 上传结果
      */
     @PostMapping("/upload")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<ChunkPartVO> upload(@RequestParam("uploadId") String uploadId,
                                        @RequestParam("partNumber") Integer partNumber,
                                        @RequestParam("chunk") MultipartFile chunk) {
@@ -54,6 +57,7 @@ public class BigFileController {
      * @return 合并后的文件信息
      */
     @PostMapping("/complete")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<ChunkCompleteVO> complete(@RequestParam("uploadId") String uploadId) {
         return chunkUploadService.completeChunk(uploadId);
     }
@@ -65,6 +69,7 @@ public class BigFileController {
      * @return 已完成和未完成的分片列表
      */
     @GetMapping("/progress/{uploadId}")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 10.0, timeout = 500)
     public Result<ChunkProgressVO> progress(@PathVariable("uploadId") String uploadId) {
         return chunkUploadService.getMissingList(uploadId);
     }
@@ -76,6 +81,7 @@ public class BigFileController {
      * @return 取消结果
      */
     @DeleteMapping("/cancel/{uploadId}")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<String> cancel(@PathVariable("uploadId") String uploadId) {
         return chunkUploadService.cancelUpload(uploadId);
     }
