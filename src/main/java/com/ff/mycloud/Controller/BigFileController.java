@@ -4,6 +4,7 @@ import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
 import com.ff.mycloud.model.vo.ChunkCompleteVO;
 import com.ff.mycloud.model.vo.ChunkPartVO;
+import com.ff.mycloud.model.vo.ChunkProgressVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.service.ChunkUploadService;
 import org.springframework.web.bind.annotation.*;
@@ -64,9 +65,8 @@ public class BigFileController {
      * @return 已完成和未完成的分片列表
      */
     @GetMapping("/progress/{uploadId}")
-    public Result<?> progress(@PathVariable("uploadId") String uploadId) {
-        // TODO: Day 33
-        return Result.success();
+    public Result<ChunkProgressVO> progress(@PathVariable("uploadId") String uploadId) {
+        return chunkUploadService.getMissingList(uploadId);
     }
 
     /**
@@ -76,8 +76,7 @@ public class BigFileController {
      * @return 取消结果
      */
     @DeleteMapping("/cancel/{uploadId}")
-    public Result<?> cancel(@PathVariable("uploadId") String uploadId) {
-        // TODO: Day 32
-        return Result.success();
+    public Result<String> cancel(@PathVariable("uploadId") String uploadId) {
+        return chunkUploadService.cancelUpload(uploadId);
     }
 }

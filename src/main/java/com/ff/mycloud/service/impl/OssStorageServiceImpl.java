@@ -448,5 +448,21 @@ private void closeOssClient(OSS ossClient) {
             closeOssClient(ossClient);
         }
     }
+
+    @Override
+    public void cancelUpload(String ossUploadId, String key) {
+        OSS ossClient = null;
+        try{
+            ossClient = getOssClient();
+            AbortMultipartUploadRequest abortMultipartUploadRequest = new AbortMultipartUploadRequest(
+                    ossProProperties.getBucketName(),
+                    key,
+                    ossUploadId
+            );
+            ossClient.abortMultipartUpload(abortMultipartUploadRequest);
+        }finally {
+            closeOssClient(ossClient);
+        }
+    }
 }
 

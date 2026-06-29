@@ -85,4 +85,6 @@ public interface StorageService {
     String uploadPart(String objectKey, String ossUploadId, int partNumber, InputStream inputStream, long partSize);
 
     String completeChunk(String objectKey, String ossUploadId, List<PartETag> partETag);
+
+    void cancelUpload(String ossUploadId, String key);
 }

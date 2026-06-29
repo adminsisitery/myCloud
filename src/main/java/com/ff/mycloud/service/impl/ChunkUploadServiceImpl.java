@@ -10,6 +10,7 @@ import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.*;
 import com.ff.mycloud.model.vo.ChunkCompleteVO;
 import com.ff.mycloud.model.vo.ChunkPartVO;
+import com.ff.mycloud.model.vo.ChunkProgressVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.redis.ChunkUploadRedis;
 import com.ff.mycloud.repositorys.FileObjectMapper;
@@ -183,5 +184,46 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         return Result.success(new ChunkCompleteVO(
                 fileInfo.getId(), originalFilename,
                 task.getFileSize(), objectKey, suffix));
+    }
+
+    @Override
+    public Result<ChunkProgressVO> getMissingList(String uploadId) {
+        // 1. 取出上传任务
+        ChunkTask task = chunkUploadRedis.getTask(uploadId);
+        if (task == null) {
+            return Result.error("uploadId不存在或已过期");
+        }
+
+        // 2. 从位图找出缺失和已完成的分片号
+        List<Integer> missing = chunkUploadRedis.getMissingParts(uploadId, task.getTotalParts());
+        List<Integer> completeParts = chunkUploadRedis.getCompleteParts(uploadId, task.getTotalParts());
+        Double progressPercent = task.getTotalParts() > 0
+                ? (double) completeParts.size() / task.getTotalParts()
+                : 0.0;
+
+        ChunkProgressVO chunkProgressVO = new ChunkProgressVO(
+                uploadId,task.getFileName(),task.getFileSize(),task.getTotalParts(),completeParts,missing,progressPercent
+        );
+        return Result.success(chunkProgressVO);
+    }
+
+    @Override
+    public Result<String> cancelUpload(String uploadId) {
+        ChunkTask task = chunkUploadRedis.getTask(uploadId);
+        if (task == null) {
+            return Result.error("uploadId不存在或已过期");
+        }
+
+        // 1. 取消 OSS 分片上传
+        StorageService storageService = storageServiceFactory.getStorageService();
+        storageService.cancelUpload(task.getOssUploadId(), task.getObjectKey());
+
+        // 2. 归还预占空间
+        userCenterMapperService.releaseSpace(task.getUserId(), task.getFileSize());
+
+        // 3. 清理 Redis
+        chunkUploadRedis.deleteTask(uploadId);
+
+        return Result.success("已取消");
     }
 }

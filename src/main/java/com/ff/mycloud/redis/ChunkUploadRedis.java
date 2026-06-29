@@ -74,8 +74,6 @@ public class ChunkUploadRedis {
         return missing;
     }
 
-    // ==================== 分片 ETag（用于 OSS 合并） ====================
-
     /**
      * 保存分片 ETag
      */
@@ -120,5 +118,16 @@ public class ChunkUploadRedis {
         for (String key : redisClient.getKeys().getKeysByPattern(pattern)) {
             redisClient.getKeys().delete(key);
         }
+    }
+
+    public List<Integer> getCompleteParts(String uploadId, Integer totalParts) {
+        List<Integer> complete = new ArrayList<>();
+        var bitmap = redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress");
+        for (int i = 1; i <= totalParts; i++) {
+            if (bitmap.get(i)) {
+                complete.add(i);
+            }
+        }
+        return complete;
     }
 }
