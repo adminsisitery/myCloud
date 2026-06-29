@@ -44,29 +44,40 @@ public class ChunkUploadRedis {
         return bucket.get();
     }
 
-    /**
-     * 删除分片上传任务（含主任务和所有分片 key）
-     */
-    public void deleteTask(String uploadId) {
-        // 删除主任务
-        redisClient.getKeys().delete(KEY_PREFIX + uploadId);
-        // 删除所有分片 key
-        deletePartKeys(uploadId);
-    }
+    // ==================== 分片进度位图 ====================
 
     /**
-     * 判断分片是否已上传完成
+     * 判断分片是否已上传
      */
     public boolean isPartUploaded(String uploadId, int partNumber) {
-        return redisClient.getBucket(KEY_PREFIX + uploadId + KEY_PARTS + partNumber).isExists();
+        return redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress").get(partNumber);
     }
 
     /**
-     * 记录分片完成并保存 ETag
-     *
-     * @param uploadId   自定义上传ID
-     * @param partNumber 分片编号
-     * @param eTag       分片ETag（用于最终合并）
+     * 标记分片已完成
+     */
+    public void markPartDone(String uploadId, int partNumber) {
+        redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress").set(partNumber, true);
+    }
+
+    /**
+     * 获取所有缺失的分片号（0 位）
+     */
+    public List<Integer> getMissingParts(String uploadId, int totalParts) {
+        List<Integer> missing = new ArrayList<>();
+        var bitmap = redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress");
+        for (int i = 1; i <= totalParts; i++) {
+            if (!bitmap.get(i)) {
+                missing.add(i);
+            }
+        }
+        return missing;
+    }
+
+    // ==================== 分片 ETag（用于 OSS 合并） ====================
+
+    /**
+     * 保存分片 ETag
      */
     public void savePartETag(String uploadId, int partNumber, String eTag) {
         RBucket<String> bucket = redisClient.getBucket(KEY_PREFIX + uploadId + KEY_PARTS + partNumber);
@@ -75,36 +86,36 @@ public class ChunkUploadRedis {
 
     /**
      * 获取所有分片的 ETag 列表（按 partNumber 升序）
-     *
-     * @param uploadId 自定义上传ID
-     * @return 有序的 PartETag 列表，用于 OSS CompleteMultipartUpload
      */
     public List<PartETag> getPartETags(String uploadId) {
         String pattern = KEY_PREFIX + uploadId + KEY_PARTS + "*";
         List<PartETag> result = new ArrayList<>();
 
         for (String key : redisClient.getKeys().getKeysByPattern(pattern)) {
-            // 读取该分片的 ETag 字符串
             String eTag = (String) redisClient.getBucket(key).get();
             if (eTag == null) continue;
 
-            // 从 key 中提取 partNumber：chunk:upload:{id}:parts{num}
             int partNumber = Integer.parseInt(key.substring(key.lastIndexOf(KEY_PARTS) + KEY_PARTS.length()));
-
             result.add(new PartETag(partNumber, eTag));
         }
 
-        // 按 partNumber 升序排列
         result.sort(Comparator.comparingInt(PartETag::getPartNumber));
         return result;
     }
 
     /**
-     * 删除所有分片 key（合并完成后清理）
-     *
-     * @param uploadId 自定义上传ID
+     * 删除任务的所有 Redis key（主任务 + 位图 + 分片 ETag）
      */
-    public void deletePartKeys(String uploadId) {
+    public void deleteTask(String uploadId) {
+        // 主任务
+        redisClient.getKeys().delete(KEY_PREFIX + uploadId);
+        // 位图
+        redisClient.getKeys().delete(KEY_PREFIX + uploadId + ":progress");
+        // 分片 ETag
+        deletePartKeys(uploadId);
+    }
+
+    private void deletePartKeys(String uploadId) {
         String pattern = KEY_PREFIX + uploadId + KEY_PARTS + "*";
         for (String key : redisClient.getKeys().getKeysByPattern(pattern)) {
             redisClient.getKeys().delete(key);

@@ -106,8 +106,9 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
                     chunk.getInputStream(),
                     chunk.getSize());
 
-            // 4. 记录分片 ETag 到 Redis
+            // 4. 记录分片 ETag + 标记位图
             chunkUploadRedis.savePartETag(uploadId, partNumber, eTag);
+            chunkUploadRedis.markPartDone(uploadId, partNumber);
 
             ChunkPartVO vo = new ChunkPartVO();
             vo.setUploadId(uploadId);
@@ -127,14 +128,15 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             return Result.error("uploadId不存在或已过期");
         }
 
-        // 2. 获取所有分片 ETag
-        List<PartETag> partETags = chunkUploadRedis.getPartETags(uploadId);
-
-        // 3. 校验分片完整性
-        if (partETags.size() != task.getTotalParts()) {
-            return Result.error("分片未全部上传，已完成: " + partETags.size()
-                    + " / " + task.getTotalParts());
+        // 2. 从位图找出缺失的分片号
+        List<Integer> missing = chunkUploadRedis.getMissingParts(uploadId, task.getTotalParts());
+        if (!missing.isEmpty()) {
+            return Result.error("缺失分片号: " + missing
+                    + "，已完成: " + (task.getTotalParts() - missing.size()) + " / " + task.getTotalParts());
         }
+
+        // 3. 获取所有分片 ETag（按 partNumber 升序）
+        List<PartETag> partETags = chunkUploadRedis.getPartETags(uploadId);
 
         // 4. 调用 OSS 合并分片
         StorageService storageService = storageServiceFactory.getStorageService();
