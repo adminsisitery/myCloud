@@ -19,4 +19,6 @@ public interface ChunkUploadService {
      * @return 分片上传结果
      */
     Result<ChunkPartVO> uploadPart(String uploadId, Integer partNumber, MultipartFile chunk);
+
+    Result<String> completeChunk(String uploadId);
 }

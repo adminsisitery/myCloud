@@ -1,23 +1,23 @@
 package com.ff.mycloud.service.impl;
 
+import com.aliyun.oss.model.PartETag;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
+import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.ChunkUploadMapper;
-import com.ff.mycloud.model.entity.ChunkFile;
-import com.ff.mycloud.model.entity.ChunkTask;
-import com.ff.mycloud.model.entity.User;
+import com.ff.mycloud.mapper.FileMapper;
+import com.ff.mycloud.model.entity.*;
 import com.ff.mycloud.model.vo.ChunkPartVO;
 import com.ff.mycloud.model.vo.ChunkVO;
 import com.ff.mycloud.redis.ChunkUploadRedis;
-import com.ff.mycloud.service.ChunkUploadService;
-import com.ff.mycloud.service.StorageService;
-import com.ff.mycloud.service.StorageServiceFactory;
-import com.ff.mycloud.service.UserCenterMapperService;
+import com.ff.mycloud.repositorys.FileObjectMapper;
+import com.ff.mycloud.service.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -27,15 +27,24 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
     private final StorageServiceFactory storageServiceFactory;
     private final ChunkUploadRedis chunkUploadRedis;
     private final ChunkUploadMapper chunkUploadMapper;
+    private final FileInfoMapperService fileInfoMapperService;
+    private final FileMapper fileMapper;
+    private final FileObjectMapper fileObjectMapper;
 
     public ChunkUploadServiceImpl(UserCenterMapperService userCenterMapperService,
                                    StorageServiceFactory storageServiceFactory,
                                    ChunkUploadRedis chunkUploadRedis,
-                                   ChunkUploadMapper chunkUploadMapper) {
+                                   ChunkUploadMapper chunkUploadMapper,
+                                   FileInfoMapperService fileInfoMapperService,
+                                   FileMapper fileMapper,
+                                   FileObjectMapper fileObjectMapper) {
         this.userCenterMapperService = userCenterMapperService;
         this.storageServiceFactory = storageServiceFactory;
         this.chunkUploadRedis = chunkUploadRedis;
         this.chunkUploadMapper = chunkUploadMapper;
+        this.fileInfoMapperService = fileInfoMapperService;
+        this.fileMapper = fileMapper;
+        this.fileObjectMapper = fileObjectMapper;
     }
 
     @Override
@@ -108,5 +117,65 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         } catch (IOException e) {
             return Result.error("分片上传失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public Result<String> completeChunk(String uploadId) {
+        // 1. 取出上传任务
+        ChunkTask task = chunkUploadRedis.getTask(uploadId);
+        if (task == null) {
+            return Result.error("uploadId不存在或已过期");
+        }
+
+        // 2. 获取所有分片 ETag
+        List<PartETag> partETags = chunkUploadRedis.getPartETags(uploadId);
+
+        // 3. 校验分片完整性
+        if (partETags.size() != task.getTotalParts()) {
+            return Result.error("分片未全部上传，已完成: " + partETags.size()
+                    + " / " + task.getTotalParts());
+        }
+
+        // 4. 调用 OSS 合并分片
+        StorageService storageService = storageServiceFactory.getStorageService();
+        String objectKey = storageService.completeChunk(
+                task.getObjectKey(),
+                task.getOssUploadId(),
+                partETags
+        );
+
+        // 5. 解析文件名和后缀
+        String originalFilename = task.getFileName();
+        String suffix = "";
+        String nameWithoutSuffix = originalFilename;
+        if (originalFilename != null && originalFilename.contains(".")) {
+            int dotIdx = originalFilename.lastIndexOf(".");
+            suffix = originalFilename.substring(dotIdx + 1);
+            nameWithoutSuffix = originalFilename.substring(0, dotIdx);
+        }
+
+        // 6. 计算 localFilePath
+        String localFilePath = "";
+        if (task.getParentId() != null && task.getParentId() != 0) {
+            FileInfo parent = fileInfoMapperService.getById(task.getParentId());
+            if (parent != null) {
+                localFilePath = parent.getLocalFilePath() + originalFilename;
+            }
+        }
+
+        // 7. 保存 FileInfo 和 FileObject
+        FileInfo fileInfo = fileMapper.toFileInfoFromPath(
+                nameWithoutSuffix, objectKey, task.getFileSize(),
+                task.getUserId(), task.getParentId(), task.getSha256Hash(),
+                suffix, task.getFileType(), originalFilename, localFilePath);
+        fileInfoMapperService.save(fileInfo);
+
+        FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
+        fileObjectMapper.createFileObject(fileObject);
+
+        // 8. 清理 Redis
+        chunkUploadRedis.deleteTask(uploadId);
+
+        return Result.success("上传成功");
     }
 }

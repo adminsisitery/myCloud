@@ -23,10 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.net.URL;
 import java.nio.file.Files;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * 阿里云OSS文件存储服务实现类
@@ -430,6 +427,24 @@ private void closeOssClient(OSS ossClient) {
             UploadPartResult result = ossClient.uploadPart(uploadPartRequest);
             return result.getPartETag().getETag();
         } finally {
+            closeOssClient(ossClient);
+        }
+    }
+
+    @Override
+    public String completeChunk(String objectKey, String ossUploadId, List<PartETag> partETag) {
+        OSS ossClient = null;
+        try{
+            ossClient = getOssClient();
+            CompleteMultipartUploadRequest completeMultipartUploadRequest = new CompleteMultipartUploadRequest(
+                    ossProProperties.getBucketName(),
+                    objectKey,
+                    ossUploadId,
+                    partETag
+            );
+            CompleteMultipartUploadResult result = ossClient.completeMultipartUpload(completeMultipartUploadRequest);
+            return result.getKey();
+        }finally {
             closeOssClient(ossClient);
         }
     }

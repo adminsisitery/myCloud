@@ -1,9 +1,11 @@
 package com.ff.mycloud.service;
 
+import com.aliyun.oss.model.PartETag;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.InputStream;
+import java.util.List;
 
 /**
  * 文件存储服务接口
@@ -81,4 +83,6 @@ public interface StorageService {
      * @return 分片的ETag值
      */
     String uploadPart(String objectKey, String ossUploadId, int partNumber, InputStream inputStream, long partSize);
+
+    String completeChunk(String objectKey, String ossUploadId, List<PartETag> partETag);
 }

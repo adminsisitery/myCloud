@@ -47,13 +47,13 @@ public class BigFileController {
 
     /**
      * 合并全部分片，完成上传
-     *
+     *  /api/chunk/complete
      * @param uploadId 初始化返回的uploadId
      * @return 合并后的文件信息
      */
     @PostMapping("/complete")
     public Result<?> complete(@RequestParam("uploadId") String uploadId) {
-        // TODO: Day 32
+        chunkUploadService.completeChunk(uploadId);
         return Result.success();
     }
 
