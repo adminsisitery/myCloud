@@ -9,6 +9,7 @@ import com.ff.mycloud.model.dto.MoveFileDTO;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
+import com.ff.mycloud.service.DeleteFileService;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.FileUploadTaskService;
 import jakarta.validation.Valid;
@@ -47,6 +48,7 @@ public class FileController {
     private final FileService fileService;
     private final FileUploadTaskService fileUploadTaskService;
     private final FileSearchHandler fileSearchHandler;
+    private final DeleteFileService deleteFileService;
 
     /**
      * 构造器注入文件服务相关依赖
@@ -54,11 +56,14 @@ public class FileController {
      * @param fileService           文件核心服务
      * @param fileUploadTaskService 文件上传任务服务
      * @param fileSearchHandler     文件搜索处理器
+     * @param deleteFileService     文件删除服务（回收站）
      */
-    public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService, FileSearchHandler fileSearchHandler) {
+    public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService,
+                          FileSearchHandler fileSearchHandler, DeleteFileService deleteFileService) {
         this.fileService = fileService;
         this.fileUploadTaskService = fileUploadTaskService;
         this.fileSearchHandler = fileSearchHandler;
+        this.deleteFileService = deleteFileService;
     }
 
     /**
@@ -145,7 +150,7 @@ public class FileController {
     @DeleteMapping("/{fileId}")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> deleteFile(@PathVariable Long fileId) {
-        fileService.deleteFile(fileId);
+        deleteFileService.deleteSingleFile(fileId);
         return Result.success();
     }
 

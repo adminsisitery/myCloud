@@ -2,6 +2,7 @@ package com.ff.mycloud.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ff.mycloud.common.constant.CommonConstants;
+import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.User;
 import com.ff.mycloud.model.entity.UserRole;
 import com.ff.mycloud.repositorys.UserMapper;
@@ -118,6 +119,8 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
     public void SetUserRole(Long userId, Long roleId) {
         baseMapper.setUserRole(userId,roleId);
     }
+
+
 
     /**
      * 根据用户ID查找单个用户（非Optional返回）

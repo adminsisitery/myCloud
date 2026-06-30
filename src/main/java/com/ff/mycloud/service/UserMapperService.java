@@ -1,6 +1,7 @@
 package com.ff.mycloud.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.User;
 import com.ff.mycloud.model.entity.UserRole;
 

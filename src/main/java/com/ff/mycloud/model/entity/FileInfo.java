@@ -69,4 +69,7 @@ public class FileInfo {
     /** 最后更新时间 */
     private LocalDateTime updatedAt;
 
+    /** 文件删除 时间*/
+    private LocalDateTime deletedAt;
+
 }

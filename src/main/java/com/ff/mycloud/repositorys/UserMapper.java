@@ -44,4 +44,5 @@ public interface UserMapper extends BaseMapper<User> {
      * @param roleId 角色ID
      */
     void updateUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
+
 }
