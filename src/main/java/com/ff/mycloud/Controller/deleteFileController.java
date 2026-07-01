@@ -2,11 +2,9 @@ package com.ff.mycloud.Controller;
 
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.model.vo.TrashListVO;
 import com.ff.mycloud.service.DeleteFileService;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -38,5 +36,54 @@ public class deleteFileController {
     public Result<?> batchDelete(@RequestBody List<Long> ids) {
         deleteFileService.batchDeleteFile(ids);
         return Result.success();
+    }
+
+    @DeleteMapping("/tureDelete")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<?> tureDelete(@RequestBody List<Long> ids) {
+        deleteFileService.tureDeleteFile(ids);
+        return Result.success();
+    }
+    /**
+     * 删除单个文件
+     * <p>
+     * 根据文件ID删除文件（支持逻辑删除或物理删除，由服务层决定）。
+     * </p>
+     *
+     * @param fileId 文件ID
+     * @return 操作结果
+     */
+    @DeleteMapping("/{fileId}")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> deleteFile(@PathVariable Long fileId) {
+        deleteFileService.deleteSingleFile(fileId);
+        return Result.success();
+    }
+
+    /**
+     * 回收站列表
+     */
+    @GetMapping("/trash")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<List<TrashListVO>> getTrashList() {
+        return Result.success(deleteFileService.getTrashList());
+    }
+
+    /**
+     * 回复文件
+     */
+    @PutMapping("/trash/restore/{fileId}")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> restoreFile(@PathVariable Long fileId) {
+        deleteFileService.restoreFile(fileId);
+    }
+
+    /**
+     * 清空回收站
+     */
+    @DeleteMapping("/trash/clean")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> clean() {
+
     }
 }

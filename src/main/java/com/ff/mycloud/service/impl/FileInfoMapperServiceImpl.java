@@ -214,5 +214,13 @@ public class FileInfoMapperServiceImpl
                 .list();
     }
 
+    @Override
+    public List<FileInfo> getTrashFile(Long currentUserId) {
+        return lambdaQuery().eq(FileInfo::getUserId,currentUserId)
+                .eq(FileInfo::getIsDeleted,true)
+                .isNotNull(FileInfo::getDeletedAt)
+                .list();
+    }
+
 
 }

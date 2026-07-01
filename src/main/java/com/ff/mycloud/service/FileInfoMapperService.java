@@ -112,4 +112,7 @@ public interface FileInfoMapperService extends IService<FileInfo> {
      * @return 匹配的文件信息列表
      */
     List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId);
+
+    List<FileInfo> getTrashFile(Long currentUserId);
+
 }

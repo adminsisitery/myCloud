@@ -8,6 +8,7 @@ import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.OperationLog;
 import com.ff.mycloud.model.entity.UserCenter;
+import com.ff.mycloud.model.vo.TrashListVO;
 import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.service.DeleteFileService;
 import com.ff.mycloud.service.FileInfoMapperService;
@@ -125,13 +126,15 @@ public class deleteFileServiceImpl implements DeleteFileService {
         // 5. 更新用户空间
         updateUserSpace(totalSize);
     }
-
     /**
      * 彻底删除（物理删除），清理 OSS 和数据库记录
      *
      * @param fileIds 文件ID列表
      */
-    public void trueDeleteFile(List<Long> fileIds) {
+    @Override
+    public void tureDeleteFile(List<Long> fileIds) {
+        validateOwnership(fileIds);
+
         for (Long id : fileIds) {
             FileInfo file = fileInfoMapperService.getById(id);
             if (file == null) {
@@ -156,6 +159,47 @@ public class deleteFileServiceImpl implements DeleteFileService {
             // 删除数据库记录
             fileInfoMapperService.removeById(id);
         }
+    }
+
+    /**
+     * 获取回收站列表
+     *
+     * @return 回收站文件VO列表
+     */
+    @Override
+    public List<TrashListVO> getTrashList() {
+        Long currentUserId = UserContext.getCurrentUserId();
+
+        List<FileInfo> trashFiles = fileInfoMapperService.getTrashFile(currentUserId);
+        long now = System.currentTimeMillis();
+        long thirtyDaysMs = 30L * 24 * 60 * 60 * 1000;
+
+        return trashFiles.stream().map(file -> {
+            TrashListVO vo = new TrashListVO();
+            vo.setId(file.getId());
+            vo.setFilename(file.getIsFolder() ? file.getFilename()
+                    : file.getFilename() + "." + file.getFileSuffix());
+            vo.setFileSize(file.getFileSize());
+            vo.setFileType(file.getFileType());
+            vo.setIsFolder(file.getIsFolder());
+            vo.setFileSuffix(file.getFileSuffix());
+            vo.setDeletedAt(file.getDeletedAt());
+
+            // 计算剩余天数
+            if (file.getDeletedAt() != null) {
+                long elapsed = now - file.getDeletedAt().atZone(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli();
+                long remaining = thirtyDaysMs - elapsed;
+                vo.setRemainingDays(Math.max(0, (remaining + 24 * 60 * 60 * 1000 - 1)
+                        / (24 * 60 * 60 * 1000))); // 向上取整天
+            }
+            return vo;
+        }).toList();
+    }
+
+    @Override
+    public void restoreFile(Long fileId) {
+
     }
 
 

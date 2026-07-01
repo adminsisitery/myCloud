@@ -138,21 +138,6 @@ public class FileController {
         return Result.success();
     }
 
-    /**
-     * 删除文件
-     * <p>
-     * 根据文件ID删除文件（支持逻辑删除或物理删除，由服务层决定）。
-     * </p>
-     *
-     * @param fileId 文件ID
-     * @return 操作结果
-     */
-    @DeleteMapping("/{fileId}")
-    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
-    public Result<Void> deleteFile(@PathVariable Long fileId) {
-        deleteFileService.deleteSingleFile(fileId);
-        return Result.success();
-    }
 
     /**
      * 移动文件/文件夹
