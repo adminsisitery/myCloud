@@ -117,4 +117,25 @@ public interface FileService {
 
     void copyFile(Long fileId);
 
+    /**
+     * 收藏文件
+     *
+     * @param fileId 文件ID
+     */
+    void starFile(Long fileId);
+
+    /**
+     * 取消收藏文件
+     *
+     * @param fileId 文件ID
+     */
+    void unstarFile(Long fileId);
+
+    /**
+     * 获取当前用户的收藏文件列表
+     *
+     * @return 收藏的文件列表
+     */
+    List<FileListVO> listStarredFiles();
+
 }

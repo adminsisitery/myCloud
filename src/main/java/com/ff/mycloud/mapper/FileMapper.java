@@ -36,6 +36,8 @@ public interface FileMapper {
     @Mapping(target = "fileSuffix",source = "fileSuffix")
     @Mapping(target = "createdAt", source = "createdAt")
     @Mapping(target = "updatedAt", source = "updatedAt")
+    @Mapping(target = "isStarred", source = "isStarred")
+    @Mapping(target = "starredAt", source = "starredAt")
     FileListVO toFileListVO(FileInfo fileInfo);
 
     /**

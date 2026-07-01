@@ -199,6 +199,46 @@ public class FileController {
         return Result.success();
     }
 
+    /**
+     * 收藏文件
+     * <p>对指定文件添加星标，已收藏的文件重复调用不影响。</p>
+     *
+     * @param fileId 文件ID
+     * @return 操作结果
+     */
+    @PostMapping("/{fileId}/star")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> starFile(@PathVariable Long fileId) {
+        fileService.starFile(fileId);
+        return Result.success();
+    }
+
+    /**
+     * 取消收藏文件
+     * <p>移除指定文件的星标。</p>
+     *
+     * @param fileId 文件ID
+     * @return 操作结果
+     */
+    @DeleteMapping("/{fileId}/star")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    public Result<Void> unstarFile(@PathVariable Long fileId) {
+        fileService.unstarFile(fileId);
+        return Result.success();
+    }
+
+    /**
+     * 获取收藏文件列表
+     * <p>返回当前用户所有已收藏且未被删除的文件。</p>
+     *
+     * @return 收藏文件列表
+     */
+    @GetMapping("/starred")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 10.0, timeout = 500)
+    public Result<List<FileListVO>> listStarredFiles() {
+        return Result.success(fileService.listStarredFiles());
+    }
+
 
 //    @PostMapping("/fast-upload")
 //    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)

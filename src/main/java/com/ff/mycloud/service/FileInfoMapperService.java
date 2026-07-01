@@ -127,4 +127,12 @@ public interface FileInfoMapperService extends IService<FileInfo> {
     List<FileInfo> getTrashSubTree(String localFilePath, Long currentUserId);
 
     List<FileInfo> findOverTimeFile(Long currentUserId);
+
+    /**
+     * 查询当前用户的所有收藏文件
+     *
+     * @param currentUserId 当前用户ID
+     * @return 收藏的文件列表
+     */
+    List<FileInfo> findStarredFiles(Long currentUserId);
 }

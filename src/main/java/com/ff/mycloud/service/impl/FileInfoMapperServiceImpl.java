@@ -249,4 +249,14 @@ public class FileInfoMapperServiceImpl
                 .list();
     }
 
+    @Override
+    public List<FileInfo> findStarredFiles(Long currentUserId) {
+        return lambdaQuery()
+                .eq(FileInfo::getUserId, currentUserId)
+                .eq(FileInfo::getIsDeleted, false)
+                .eq(FileInfo::getIsStarred, true)
+                .orderByDesc(FileInfo::getStarredAt)
+                .list();
+    }
+
 }

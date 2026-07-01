@@ -72,4 +72,11 @@ public class FileInfo {
     /** 文件删除 时间*/
     private LocalDateTime deletedAt;
 
+    /** 是否已收藏/星标 */
+    @TableField("is_starred")
+    private Boolean isStarred;
+
+    /** 收藏时间 */
+    private LocalDateTime starredAt;
+
 }

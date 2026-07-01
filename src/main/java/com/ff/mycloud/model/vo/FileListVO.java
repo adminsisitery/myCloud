@@ -46,4 +46,10 @@ public class FileListVO {
 
     /** 文件后缀名，如 .txt、.jpg、.pdf 等 */
     private String fileSuffix;
+
+    /** 是否已收藏 */
+    private Boolean isStarred;
+
+    /** 收藏时间 */
+    private LocalDateTime starredAt;
 } 

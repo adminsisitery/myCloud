@@ -816,6 +816,63 @@ public class FileServiceImpl implements FileService {
     }
 
     /**
+     * 收藏文件
+     * <p>校验文件存在且属于当前用户、未被删除，然后设置收藏标记。</p>
+     *
+     * @param fileId 文件ID
+     */
+    @Override
+    public void starFile(Long fileId) {
+        Long currentUserId = UserContext.getCurrentUserId();
+        FileInfo file = fileInfoMapperService.findByIdAndUserId(fileId, currentUserId);
+        ExceptionUtil.throwIfNull(file, ErrorCode.FILE_NOT_FOUND);
+
+        file.setIsStarred(true);
+        file.setStarredAt(LocalDateTime.now());
+        fileInfoMapperService.updateById(file);
+        log.info("收藏文件成功：fileId={}", fileId);
+    }
+
+    /**
+     * 取消收藏文件
+     * <p>校验文件存在且属于当前用户，然后清除收藏标记。</p>
+     *
+     * @param fileId 文件ID
+     */
+    @Override
+    public void unstarFile(Long fileId) {
+        Long currentUserId = UserContext.getCurrentUserId();
+        FileInfo file = fileInfoMapperService.findByIdAndUserId(fileId, currentUserId);
+        ExceptionUtil.throwIfNull(file, ErrorCode.FILE_NOT_FOUND);
+
+        file.setIsStarred(false);
+        file.setStarredAt(null);
+        fileInfoMapperService.updateById(file);
+        log.info("取消收藏文件：fileId={}", fileId);
+    }
+
+    /**
+     * 获取当前用户的收藏文件列表
+     * <p>查询 isStarred=true 且未被删除的文件，补充后缀名后返回。</p>
+     *
+     * @return 收藏的文件列表
+     */
+    @Override
+    public List<FileListVO> listStarredFiles() {
+        Long currentUserId = UserContext.getCurrentUserId();
+        List<FileInfo> starredFiles = fileInfoMapperService.findStarredFiles(currentUserId);
+
+        for (FileInfo fileInfo : starredFiles) {
+            if (!fileInfo.getIsFolder()) {
+                fileInfo.setFilename(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+            }
+            fileInfo.setFilename(fileInfo.getFilename());
+        }
+
+        return starredFiles.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
+    }
+
+    /**
      * 异步发送操作日志（通过MQ）
      * <p>组装操作日志实体并通过RabbitMQ异步发送，包含用户ID、操作类型、文件信息、客户端IP等。</p>
      *
