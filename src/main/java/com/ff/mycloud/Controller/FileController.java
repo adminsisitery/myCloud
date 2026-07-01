@@ -3,7 +3,6 @@ package com.ff.mycloud.Controller;
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.handler.FileSearchHandler;
-import com.ff.mycloud.handler.MySQLFileSearchHandler;
 import com.ff.mycloud.model.dto.FileRenameDTO;
 import com.ff.mycloud.model.dto.MoveFileDTO;
 import com.ff.mycloud.model.entity.FileCheck;
@@ -120,6 +119,19 @@ public class FileController {
         http.setContentLength(content.length);
         return ResponseEntity.ok().headers(http).body(content);
     }
+
+    /**
+     * 获取最近访问文件
+     * <p>返回当前用户最近下载过的文件，按访问时间倒序，最多 {@code CommonConstants.RecentFile.N} 条。</p>
+     *
+     * @return 最近访问的文件列表
+     */
+    @GetMapping("/recent")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 10.0, timeout = 500)
+    public Result<List<FileListVO>> getRecentFiles() {
+        return Result.success(fileService.getRecentFiles());
+    }
+
 
     /**
      * 重命名文件

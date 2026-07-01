@@ -102,4 +102,11 @@ public class CommonConstants {
         public static final String KEY_PARTS = ":parts";
     }
 
+    /**
+     * 最近访问文件
+     */
+    public static class RecentFile {
+        public static final int N = 10;
+    }
+
 } 

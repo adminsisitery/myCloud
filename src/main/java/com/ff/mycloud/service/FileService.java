@@ -2,6 +2,7 @@ package com.ff.mycloud.service;
 
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.FileCheck;
+import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import jakarta.validation.constraints.NotBlank;
@@ -137,5 +138,19 @@ public interface FileService {
      * @return 收藏的文件列表
      */
     List<FileListVO> listStarredFiles();
+
+    /**
+     * 获取最近访问的文件列表
+     *
+     * @return 最近访问的文件列表 VO
+     */
+    List<FileListVO> getRecentFiles();
+
+    /**
+     * 记录文件访问（下载时调用）
+     *
+     * @param fileId 文件ID
+     */
+    void recordAccess(Long fileId);
 
 }

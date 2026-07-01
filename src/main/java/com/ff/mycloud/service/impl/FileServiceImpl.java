@@ -15,6 +15,7 @@ import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
+import com.ff.mycloud.repositorys.FileRecentAccess;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -50,6 +51,7 @@ public class FileServiceImpl implements FileService {
     private final UpLoadProgressService upLoadProgressService;
     private final FileObjectMapper fileObjectMapper;
     private final HttpCodeStatusMapper healthHttpCodeStatusMapper;
+    private final FileRecentAccess fileRecentAccess;
     StorageServiceFactory storageServiceFactory;
     FileMapper fileMapper;
     FileInfoMapperService fileInfoMapperService;
@@ -64,7 +66,7 @@ public class FileServiceImpl implements FileService {
                            UserMapperServiceImpl userMapperServiceImpl,
                            UpLoadProgressService upLoadProgressService,
                            RabbitMqService rabbitMqService,
-                           FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper) {
+                           FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper, FileRecentAccess fileRecentAccess) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
@@ -75,6 +77,7 @@ public class FileServiceImpl implements FileService {
         this.rabbitMqService = rabbitMqService;
         this.fileObjectMapper = fileObjectMapper;
         this.healthHttpCodeStatusMapper = healthHttpCodeStatusMapper;
+        this.fileRecentAccess = fileRecentAccess;
     }
 
     /**
@@ -272,6 +275,8 @@ public class FileServiceImpl implements FileService {
         //先得到fileInfo
         User currentUser = UserContext.getCurrentUser();
         FileInfo andValidateFile = getAndValidateFile(fileId, currentUser);
+        // 记录最近访问
+        recordAccess(fileId);
         return retrieveFileContent(andValidateFile);
     }
 
@@ -870,6 +875,26 @@ public class FileServiceImpl implements FileService {
         }
 
         return starredFiles.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public void recordAccess(Long fileId) {
+        fileRecentAccess.recordAccess(UserContext.getCurrentUserId(), fileId, LocalDateTime.now());
+    }
+
+    @Override
+    public List<FileListVO> getRecentFiles() {
+        Long currentUserId = UserContext.getCurrentUserId();
+        List<FileInfo> recentFiles = fileRecentAccess.getRecentFiles(currentUserId, CommonConstants.RecentFile.N);
+
+        for (FileInfo fileInfo : recentFiles) {
+            if (!fileInfo.getIsFolder()) {
+                fileInfo.setFilename(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+            }
+            fileInfo.setFilename(fileInfo.getFilename());
+        }
+
+        return recentFiles.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
     /**
