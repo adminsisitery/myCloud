@@ -17,6 +17,7 @@ import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.boot.actuate.health.HttpCodeStatusMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -364,6 +365,97 @@ public class FileServiceImpl implements FileService {
         }
 
         log.info("移动成功: fileId={}, oldPath={}, newPath={}", fileId, oldPathPrefix, newFilePath);
+    }
+
+    /**
+     * 文件复制操作
+     * <p>
+     * 单文件：直接复制一条 FileInfo + FileObject 记录（共享 OSS 文件）
+     * 文件夹：递归复制整棵子树，路径前缀替换，父目录指向新的复制根节点
+     * </p>
+     *
+     * @param fileId 源文件ID
+     */
+    @Override
+    public void copyFile(Long fileId) {
+        Long currentUserId = UserContext.getCurrentUserId();
+
+        // 1. 校验源文件存在且属于当前用户
+        FileInfo source = fileInfoMapperService.findByIdAndUserId(fileId, currentUserId);
+        ExceptionUtil.throwIfNull(source, ErrorCode.FILE_NOT_FOUND);
+
+        if (source.getIsFolder() != null && source.getIsFolder()) {
+            // ========== 文件夹：递归复制 ==========
+            String oldPrefix = source.getLocalFilePath();
+            // 去掉末尾 /
+            String oldPrefixNormalized = oldPrefix.endsWith("/") ? oldPrefix.substring(0, oldPrefix.length() - 1) : oldPrefix;
+
+            List<FileInfo> children = fileInfoMapperService.getSubTree(oldPrefixNormalized, currentUserId);
+
+            // 先复制根文件夹，拿到新 ID
+            FileInfo newRoot = cloneFileInfo(source);
+            newRoot.setFilename(source.getFilename() + "(复制)");
+            String newRootPath = source.getLocalFilePath().replaceFirst(
+                    java.util.regex.Pattern.quote(source.getFilename()) + "/?$",
+                    newRoot.getFilename() + "/");
+            newRoot.setLocalFilePath(newRootPath);
+            fileInfoMapperService.save(newRoot);
+            Long newRootId = newRoot.getId();
+
+            // 处理子节点
+            for (FileInfo child : children) {
+                if (child.getId().equals(source.getId())) {
+                    continue; // 跳过根文件夹，已经处理
+                }
+
+                FileInfo newChild = cloneFileInfo(child);
+                // 路径前缀替换
+                if (child.getLocalFilePath() != null && oldPrefixNormalized != null) {
+                    String relativePart = child.getLocalFilePath().substring(oldPrefixNormalized.length());
+                    newChild.setLocalFilePath(newRootPath + relativePart);
+                }
+                // 父目录指向新根
+                if (child.getParentId().equals(source.getId())) {
+                    newChild.setParentId(newRootId);
+                }
+                fileInfoMapperService.save(newChild);
+            }
+
+            log.info("文件夹复制完成：fileId={}, 共{}个节点", fileId, children.size());
+        } else {
+            // ========== 单文件：直接复制 ==========
+            FileInfo copyFile = cloneFileInfo(source);
+            copyFile.setFilename(source.getFilename() + "(复制)");
+            fileInfoMapperService.save(copyFile);
+
+            // 秒传：共享同一个 OSS 文件，创建 FileObject 引用
+            FileObject fileObject = fileMapper.toFileObject(copyFile, FileObjectStatus.AVAILABLE);
+            fileObjectMapper.createFileObject(fileObject);
+
+            log.info("文件复制成功：fileId={}", fileId);
+        }
+    }
+
+    /**
+     * 克隆 FileInfo 基础字段（不含 id/time，由 DB 自动生成）
+     */
+    private FileInfo cloneFileInfo(FileInfo source) {
+        FileInfo f = new FileInfo();
+        f.setFilename(source.getFilename());
+        f.setOriginalFilename(source.getOriginalFilename());
+        f.setPath(source.getPath());
+        f.setFileSize(source.getFileSize());
+        f.setFileType(source.getFileType());
+        f.setSha256Hash(source.getSha256Hash());
+        f.setFileSuffix(source.getFileSuffix());
+        f.setUserId(source.getUserId());
+        f.setParentId(source.getParentId());
+        f.setIsFolder(source.getIsFolder());
+        f.setIsDeleted(false);
+        f.setLocalFilePath(source.getLocalFilePath());
+        f.setCreatedAt(LocalDateTime.now());
+        f.setUpdatedAt(LocalDateTime.now());
+        return f;
     }
 
     /**

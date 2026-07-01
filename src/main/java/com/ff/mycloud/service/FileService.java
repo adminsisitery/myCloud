@@ -114,4 +114,7 @@ public interface FileService {
      * @return 文件校验结果视图
      */
     Result<FileCheckVO> checkFilesHash(FileCheck fileCheck);
+
+    void copyFile(Long fileId);
+
 }

@@ -188,6 +188,17 @@ public class FileController {
         return fileService.checkFilesHash(fileCheck);
     }
 
+    /**
+     * 文件复制
+     * /api/files/copy/{fileId}
+     */
+    @PostMapping("/copy/{fileId}")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
+    public Result<Void> copyFile(@PathVariable Long fileId){
+        fileService.copyFile(fileId);
+        return Result.success();
+    }
+
 
 //    @PostMapping("/fast-upload")
 //    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
