@@ -70,12 +70,13 @@ public class deleteFileController {
     }
 
     /**
-     * 回复文件
+     * 恢复文件
      */
     @PutMapping("/trash/restore/{fileId}")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> restoreFile(@PathVariable Long fileId) {
         deleteFileService.restoreFile(fileId);
+        return Result.success();
     }
 
     /**
@@ -84,6 +85,7 @@ public class deleteFileController {
     @DeleteMapping("/trash/clean")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<Void> clean() {
-
+        deleteFileService.cleanTrash();
+        return Result.success();
     }
 }

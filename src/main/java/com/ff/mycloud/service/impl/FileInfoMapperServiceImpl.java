@@ -222,5 +222,22 @@ public class FileInfoMapperServiceImpl
                 .list();
     }
 
+    @Override
+    public List<FileInfo> getTrashSubTree(String localFilePath, Long currentUserId) {
+        String matchPath = localFilePath;
+        if (!matchPath.endsWith("/")) {
+            matchPath = matchPath + "/";
+        }
+        final String s = matchPath;
+        return lambdaQuery()
+                .eq(FileInfo::getUserId, currentUserId)
+                .eq(FileInfo::getIsDeleted, true)
+                .and(w -> w
+                        .eq(FileInfo::getLocalFilePath, localFilePath)
+                        .or()
+                        .likeRight(FileInfo::getLocalFilePath, s)
+                )
+                .list();
+    }
 
 }

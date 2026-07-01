@@ -115,4 +115,13 @@ public interface FileInfoMapperService extends IService<FileInfo> {
 
     List<FileInfo> getTrashFile(Long currentUserId);
 
+    /**
+     * 获取回收站中指定目录下的所有子节点（含自身）
+     * <p>与 getSubTree 对应，但查询 isDeleted=true 的回收站文件。</p>
+     *
+     * @param localFilePath 本地文件路径
+     * @param currentUserId 当前用户ID
+     * @return 回收站中的子文件列表
+     */
+    List<FileInfo> getTrashSubTree(String localFilePath, Long currentUserId);
 }

@@ -1,6 +1,5 @@
 package com.ff.mycloud.service;
 
-
 import com.ff.mycloud.model.vo.TrashListVO;
 
 import java.util.List;
@@ -35,5 +34,15 @@ public interface DeleteFileService {
      */
     List<TrashListVO> getTrashList();
 
+    /**
+     * 恢复回收站中的文件/文件夹
+     *
+     * @param fileId 文件ID
+     */
     void restoreFile(Long fileId);
+
+    /**
+     * 清空当前用户的回收站（彻底删除全部已删除文件）
+     */
+    void cleanTrash();
 }
