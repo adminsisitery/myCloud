@@ -240,4 +240,13 @@ public class FileInfoMapperServiceImpl
                 .list();
     }
 
+    @Override
+    public List<FileInfo> findOverTimeFile(Long currentUserId) {
+        return lambdaQuery()
+                .eq(FileInfo::getUserId,currentUserId)
+                .eq(FileInfo::getIsDeleted,true)
+                .lt(FileInfo::getDeletedAt, LocalDateTime.now().minusDays(30))
+                .list();
+    }
+
 }

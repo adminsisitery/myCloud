@@ -135,16 +135,19 @@ public class deleteFileServiceImpl implements DeleteFileService {
                 throw new BusinessException(ErrorCode.NO_PERMISSION);
             }
 
-            long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
-            log.debug("文件{}引用数：{}", file.getLocalFilePath(), referenceCount);
+            // 文件夹直接删记录，文件需判断秒传引用
+            if (!Boolean.TRUE.equals(file.getIsFolder())) {
+                long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
+                log.debug("文件{}引用数：{}", file.getLocalFilePath(), referenceCount);
 
-            if (referenceCount <= 1) {
-                StorageService storageService = storageServiceFactory.getStorageService();
-                try {
-                    storageService.deleteFile(file.getPath());
-                    log.info("物理删除成功：{}", file.getPath());
-                } catch (Exception e) {
-                    log.error("物理删除失败：{}", file.getPath(), e);
+                if (referenceCount <= 1) {
+                    StorageService storageService = storageServiceFactory.getStorageService();
+                    try {
+                        storageService.deleteFile(file.getPath());
+                        log.info("物理删除成功：{}", file.getPath());
+                    } catch (Exception e) {
+                        log.error("物理删除失败：{}", file.getPath(), e);
+                    }
                 }
             }
 
@@ -225,18 +228,18 @@ public class deleteFileServiceImpl implements DeleteFileService {
             }
         }
 
-        // 3. 处理文件名冲突：目标位置已有同名文件则自动重命名
-        resolveNameConflict(file, currentUserId);
-
-        // 3. 文件夹：递归恢复所有子节点（用回收站专用查询，因为 isDeleted=true）
+        // 3. 文件夹：先查出所有子节点（用旧的 localFilePath）
         List<FileInfo> filesToRestore;
         if (file.getIsFolder()) {
-            String folderPath = file.getLocalFilePath();
-            filesToRestore = fileInfoMapperService.getTrashSubTree(folderPath, currentUserId);
+            filesToRestore = fileInfoMapperService.getTrashSubTree(file.getLocalFilePath(), currentUserId);
         } else {
             filesToRestore = Collections.singletonList(file);
         }
 
+        // 4. 处理同名冲突（在恢复前改名，有新名字后路径也对）
+        resolveNameConflict(file, currentUserId);
+
+        // 5. 恢复
         long restoredSize = 0;
         for (FileInfo f : filesToRestore) {
             f.setIsDeleted(false);
@@ -278,15 +281,17 @@ public class deleteFileServiceImpl implements DeleteFileService {
         log.info("开始清空回收站：用户{}，共{}个文件/文件夹", currentUserId, trashFiles.size());
 
         for (FileInfo file : trashFiles) {
-            long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
+            if (!Boolean.TRUE.equals(file.getIsFolder())) {
+                long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
 
-            if (referenceCount <= 1) {
-                StorageService storageService = storageServiceFactory.getStorageService();
-                try {
-                    storageService.deleteFile(file.getPath());
-                    log.debug("物理删除成功：{}", file.getPath());
-                } catch (Exception e) {
-                    log.error("物理删除失败：{}", file.getPath(), e);
+                if (referenceCount <= 1) {
+                    StorageService storageService = storageServiceFactory.getStorageService();
+                    try {
+                        storageService.deleteFile(file.getPath());
+                        log.debug("物理删除成功：{}", file.getPath());
+                    } catch (Exception e) {
+                        log.error("物理删除失败：{}", file.getPath(), e);
+                    }
                 }
             }
 
@@ -326,16 +331,26 @@ public class deleteFileServiceImpl implements DeleteFileService {
                                 : s.getFilename() + "." + s.getFileSuffix()));
 
         if (conflict) {
-            String newName = file.getFilename() + "(已恢复)";
+            String oldName = file.getFilename();
+            String newName = oldName + "(已恢复)";
+            String oldPath = file.getLocalFilePath();
             file.setFilename(newName);
-            if (!file.getIsFolder()) {
-                // 更新 localFilePath
-                String oldPath = file.getLocalFilePath();
+
+            if (file.getIsFolder()) {
+                // 文件夹: localFilePath 以 "oldName/" 结尾 → 替换为 "newName/"
+                if (oldPath != null && oldPath.endsWith(oldName + "/")) {
+                    String parentPath = oldPath.substring(0, oldPath.length() - oldName.length() - 1);
+                    file.setLocalFilePath(parentPath + newName + "/");
+                }
+            } else {
+                // 文件: localFilePath 以 "xxx.后缀" 结尾
                 String suffix = file.getFileSuffix() != null ? "." + file.getFileSuffix() : "";
-                String parentPath = oldPath != null && oldPath.contains("/")
-                        ? oldPath.substring(0, oldPath.lastIndexOf("/") + 1)
-                        : "";
-                file.setLocalFilePath(parentPath + newName + suffix);
+                if (oldPath != null && oldPath.contains("/")) {
+                    String parentPath = oldPath.substring(0, oldPath.lastIndexOf("/") + 1);
+                    file.setLocalFilePath(parentPath + newName + suffix);
+                } else {
+                    file.setLocalFilePath(newName + suffix);
+                }
             }
             fileInfoMapperService.updateById(file);
             log.info("同名冲突，自动重命名：{} -> {}", targetName, newName);

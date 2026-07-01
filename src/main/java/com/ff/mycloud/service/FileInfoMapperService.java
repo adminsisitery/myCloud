@@ -1,6 +1,7 @@
 package com.ff.mycloud.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.FileInfo;
 
 import java.time.LocalDateTime;
@@ -124,4 +125,6 @@ public interface FileInfoMapperService extends IService<FileInfo> {
      * @return 回收站中的子文件列表
      */
     List<FileInfo> getTrashSubTree(String localFilePath, Long currentUserId);
+
+    List<FileInfo> findOverTimeFile(Long currentUserId);
 }
