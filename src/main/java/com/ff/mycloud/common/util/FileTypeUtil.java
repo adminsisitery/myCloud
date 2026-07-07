@@ -195,7 +195,7 @@ public class FileTypeUtil {
 
     /**
      * 判断指定后缀的文件是否支持在线预览。
-     * 支持预览的类型包括：图片（jpg/png/gif等）、文本/代码文件、PDF。
+     * 支持预览的类型包括：图片（jpg/png/gif等）、文本/代码文件、PDF、音频、视频。
      *
      * @param suffix 文件后缀（不含点号）
      * @return true表示支持预览，false表示不支持
@@ -214,7 +214,7 @@ public class FileTypeUtil {
             return true;
         }
 
-        // 2. 文本/代码类型（与上面 static 块保持一致）
+        // 2. 文本/代码类型
         if (ext.equals("txt") || ext.equals("json") || ext.equals("md") || ext.equals("markdown")
                 || ext.equals("csv") || ext.equals("ini") || ext.equals("cfg") || ext.equals("conf") || ext.equals("log")
                 || ext.equals("html") || ext.equals("htm") || ext.equals("css") || ext.equals("scss") || ext.equals("less")
@@ -236,7 +236,60 @@ public class FileTypeUtil {
             return true;
         }
 
+        // 4. 音频类型（OSS 预签名 URL + <audio> 标签，浏览器原生支持流播放）
+        if (ext.equals("mp3") || ext.equals("wav") || ext.equals("ogg") || ext.equals("flac")
+                || ext.equals("aac") || ext.equals("m4a") || ext.equals("wma")) {
+            return true;
+        }
+
+        // 5. 视频类型（OSS 支持 Range 请求，浏览器 <video> 可拖进度条）
+        if (ext.equals("mp4") || ext.equals("avi") || ext.equals("mkv") || ext.equals("mov")
+                || ext.equals("wmv") || ext.equals("webm") || ext.equals("flv") || ext.equals("m4v")) {
+            return true;
+        }
+
         // 其他均不支持预览
         return false;
+    }
+
+    /**
+     * 根据文件后缀判断预览类型分类，用于前端选择不同渲染组件。
+     *
+     * @param suffix 文件后缀（不含点号）
+     * @return image | video | audio | pdf | text | unknown
+     */
+    public static String getPreviewCategory(String suffix) {
+        if (suffix == null) {
+            return "unknown";
+        }
+
+        String ext = suffix.toLowerCase();
+
+        if (ext.equals("jpg") || ext.equals("jpeg") || ext.equals("png") || ext.equals("gif")
+                || ext.equals("bmp") || ext.equals("webp") || ext.equals("svg")
+                || ext.equals("ico") || ext.equals("tif") || ext.equals("tiff")) {
+            return "image";
+        }
+
+        if (ext.equals("mp4") || ext.equals("avi") || ext.equals("mkv") || ext.equals("mov")
+                || ext.equals("wmv") || ext.equals("webm") || ext.equals("flv") || ext.equals("m4v")) {
+            return "video";
+        }
+
+        if (ext.equals("mp3") || ext.equals("wav") || ext.equals("ogg") || ext.equals("flac")
+                || ext.equals("aac") || ext.equals("m4a") || ext.equals("wma")) {
+            return "audio";
+        }
+
+        if (ext.equals("pdf")) {
+            return "pdf";
+        }
+
+        // 文本/代码兜底
+        if (isPreviewSupported(ext)) {
+            return "text";
+        }
+
+        return "unknown";
     }
 }

@@ -7,15 +7,11 @@ import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.vo.PreviewVO;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.impl.OssStorageServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -61,28 +57,46 @@ public class PreviewController {
 
 
     /**
-     * 获取文件预签名预览 URL
+     * 获取文件预览信息
      * <p>
-     * 校验当前用户是否为文件所有者，通过后生成 5 分钟有效期的 OSS 预签名 URL。
+     * 校验当前用户是否为文件所有者，生成 5 分钟 OSS 预签名 URL，
+     * 同时返回预览分类（image/video/audio/pdf/text），前端根据分类选择对应渲染组件。
      * </p>
      *
-     * @param fileId  文件ID
-     * @param request HTTP 请求对象
-     * @return 预签名 URL 结果
-     * @throws BusinessException 当用户无权限或文件不存在时抛出
+     * @param fileId 文件ID
+     * @return 预览信息（URL + 分类 + MIME + 文件名 + 大小）
+     * @throws BusinessException 当用户无权限、文件不存在或不支持预览时抛出
      */
     @GetMapping("/{fileId}")
     @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
-    public Result<String> preview(@PathVariable Long fileId, HttpServletRequest request){
+    public Result<PreviewVO> preview(@PathVariable Long fileId) {
 
-        // 查询文件信息，验证是否存在且属于当前用户
         FileInfo fileInfo = fileInfoMapperService.findByIdAndUserId(fileId, UserContext.getCurrentUserId());
-        if(fileInfo == null){
+        if (fileInfo == null) {
             throw new BusinessException(ErrorCode.NO_PERMISSION);
         }
+
+        String suffix = fileInfo.getFileSuffix();
+        if (!FileTypeUtil.isPreviewSupported(suffix)) {
+            throw new BusinessException(ErrorCode.FILE_NOT_SUPPORT_PREVIEW);
+        }
+
         // 生成 OSS 预签名 URL（5分钟有效期）
         String url = ossStorageService.generatePresignedUrl(fileInfo.getPath(), 300);
-        return Result.success(url);
+
+        String fullName = fileInfo.getFilename();
+        if (suffix != null && !suffix.isEmpty()) {
+            fullName = fullName + "." + suffix;
+        }
+
+        PreviewVO vo = new PreviewVO(
+                url,
+                FileTypeUtil.getPreviewCategory(suffix),
+                FileTypeUtil.getContentTypeFromFileSuffix(suffix),
+                fullName,
+                fileInfo.getFileSize()
+        );
+        return Result.success(vo);
     }
 
     //    @GetMapping("{fileId}")
