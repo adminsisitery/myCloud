@@ -79,4 +79,7 @@ public class FileInfo {
     /** 收藏时间 */
     private LocalDateTime starredAt;
 
+    /** 文件分类ID，对应 t_file_category.id */
+    private Integer categoryId;
+
 }

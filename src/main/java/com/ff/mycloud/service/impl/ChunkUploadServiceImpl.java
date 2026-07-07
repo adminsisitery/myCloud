@@ -3,6 +3,7 @@ package com.ff.mycloud.service.impl;
 import com.aliyun.oss.model.PartETag;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.ChunkUploadMapper;
@@ -175,6 +176,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
                 nameWithoutSuffix, objectKey, task.getFileSize(),
                 task.getUserId(), task.getParentId(), task.getSha256Hash(),
                 suffix, task.getFileType(), originalFilename, localFilePath);
+        fileInfo.setCategoryId(FileTypeUtil.getCategoryId(suffix));
         fileInfoMapperService.save(fileInfo);
 
         FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);

@@ -6,6 +6,7 @@ import com.aliyun.oss.model.GetObjectRequest;
 import com.aliyun.oss.model.OSSObject;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.mapper.FileMapper;
@@ -101,6 +102,7 @@ public class FolderServiceImpl implements FolderService {
 
         //创建文件夹
         FileInfo fileInfoFromFolder = fileMapper.toFileInfoFromFolder(folderName, true, false, parentId, currentUserId,localFilePath);
+        fileInfoFromFolder.setCategoryId(FileTypeUtil.getCategoryId(null)); // 文件夹归为"其他"
         fileInfoMapperService.save(fileInfoFromFolder);
 //        //在ES里创建文件夹
 //        fileSearchService.save(fileInfoFromFolder.getId(),fileInfoFromFolder.getFilename(),UserContext.getCurrentUserId());

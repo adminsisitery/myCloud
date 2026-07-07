@@ -5,6 +5,7 @@ import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.ExceptionUtil;
 import com.ff.mycloud.common.util.FileHashUtil;
+import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.common.util.IpUtil;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
@@ -127,6 +128,7 @@ public class FileServiceImpl implements FileService {
 
             //进行fileInfo对象拼装
             FileInfo fileInfo = fileMapper.toFileInfo(file, filePath,currentUser.getId(), parentId,localFilePath);
+            fileInfo.setCategoryId(categoryFiles(fileInfo));
             //保存到数据库中
 //            return fileInfoRepository.save(fileInfo).getPath();
             fileInfoMapperService.save(fileInfo);
@@ -236,6 +238,7 @@ public class FileServiceImpl implements FileService {
 
         // 组装文件信息和文件对象并保存
         FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
+        fileInfo.setCategoryId(categoryFiles(fileInfo));
         FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
         fileInfoMapperService.save(fileInfo);
         fileObjectMapper.createFileObject(fileObject);//上传完成保存保存object表
@@ -458,6 +461,7 @@ public class FileServiceImpl implements FileService {
         f.setIsFolder(source.getIsFolder());
         f.setIsDeleted(false);
         f.setLocalFilePath(source.getLocalFilePath());
+        f.setCategoryId(source.getCategoryId());
         f.setCreatedAt(LocalDateTime.now());
         f.setUpdatedAt(LocalDateTime.now());
         return f;
@@ -757,6 +761,7 @@ public class FileServiceImpl implements FileService {
         // 使用MapStruct创建一个新的文件记录
         String filenames = filename.substring(0, filename.lastIndexOf("."));
         FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(filename,filenames, existingFile, currentUser.getId(), parentId, sha256Hash);
+        newFileInfo.setCategoryId(categoryFiles(newFileInfo));
 
 //         如果有任务ID，则进行进度跟踪
         if (taskId != null) {
@@ -880,6 +885,11 @@ public class FileServiceImpl implements FileService {
     @Override
     public void recordAccess(Long fileId) {
         fileRecentAccess.recordAccess(UserContext.getCurrentUserId(), fileId, LocalDateTime.now());
+    }
+
+    @Override
+    public int categoryFiles(FileInfo fileInfo) {
+        return FileTypeUtil.getCategoryId(fileInfo.getFileSuffix());
     }
 
     @Override

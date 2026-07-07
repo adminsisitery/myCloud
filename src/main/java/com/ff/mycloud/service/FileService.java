@@ -153,4 +153,11 @@ public interface FileService {
      */
     void recordAccess(Long fileId);
 
+    /**
+     * 文件分类方法
+     * @param fileInfo
+     * @return
+     */
+    int categoryFiles(FileInfo fileInfo);
+
 }

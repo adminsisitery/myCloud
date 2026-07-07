@@ -3,10 +3,7 @@ package com.ff.mycloud.service.impl;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.model.entity.UserCenter;
-import com.ff.mycloud.service.FileUploadAsyncService;
-import com.ff.mycloud.service.FileUploadTaskService;
-import com.ff.mycloud.service.UpLoadProgressService;
-import com.ff.mycloud.service.UserCenterMapperService;
+import com.ff.mycloud.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,13 +28,16 @@ public class FileUploadTaskServiceImpl implements FileUploadTaskService {
     private final UpLoadProgressService upLoadProgressService;
     private final UserCenterMapperService userCenterMapperService;
     private final FileUploadAsyncService fileUploadAsyncService;
+    private final FileService fileService;
 
     public FileUploadTaskServiceImpl(UpLoadProgressService upLoadProgressService,
                                      UserCenterMapperService userCenterMapperService,
-                                     FileUploadAsyncService fileUploadAsyncService) {
+                                     FileUploadAsyncService fileUploadAsyncService, FileService fileService) {
         this.upLoadProgressService = upLoadProgressService;
         this.userCenterMapperService = userCenterMapperService;
         this.fileUploadAsyncService = fileUploadAsyncService;
+        this.fileService = fileService;
+
     }
 
     /**

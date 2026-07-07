@@ -292,4 +292,51 @@ public class FileTypeUtil {
 
         return "unknown";
     }
+
+    /**
+     * 根据文件后缀返回分类ID，对应 t_file_category.id
+     *
+     * @param suffix 文件后缀（无点号）
+     * @return 1-图片 2-文档 3-视频 4-音频 5-压缩包 6-代码 7-其他
+     */
+    public static int getCategoryId(String suffix) {
+        if (suffix == null) {
+            return 7;
+        }
+        String ext = suffix.toLowerCase();
+
+        if ("jpg".equals(ext) || "jpeg".equals(ext) || "png".equals(ext) || "gif".equals(ext)
+                || "bmp".equals(ext) || "webp".equals(ext) || "svg".equals(ext)
+                || "ico".equals(ext) || "tif".equals(ext) || "tiff".equals(ext)) {
+            return 1;
+        }
+        if ("pdf".equals(ext) || "doc".equals(ext) || "docx".equals(ext)
+                || "xls".equals(ext) || "xlsx".equals(ext) || "ppt".equals(ext)
+                || "pptx".equals(ext) || "txt".equals(ext) || "md".equals(ext)
+                || "csv".equals(ext)) {
+            return 2;
+        }
+        if ("mp4".equals(ext) || "avi".equals(ext) || "mkv".equals(ext)
+                || "mov".equals(ext) || "wmv".equals(ext) || "webm".equals(ext)
+                || "flv".equals(ext) || "m4v".equals(ext)) {
+            return 3;
+        }
+        if ("mp3".equals(ext) || "wav".equals(ext) || "ogg".equals(ext)
+                || "flac".equals(ext) || "aac".equals(ext) || "m4a".equals(ext)
+                || "wma".equals(ext)) {
+            return 4;
+        }
+        if ("zip".equals(ext) || "rar".equals(ext) || "7z".equals(ext)
+                || "tar".equals(ext) || "gz".equals(ext)) {
+            return 5;
+        }
+        if ("java".equals(ext) || "py".equals(ext) || "js".equals(ext) || "ts".equals(ext)
+                || "html".equals(ext) || "css".equals(ext) || "go".equals(ext)
+                || "rs".equals(ext) || "c".equals(ext) || "cpp".equals(ext)
+                || "json".equals(ext) || "xml".equals(ext) || "yaml".equals(ext)
+                || "yml".equals(ext) || "sql".equals(ext) || "sh".equals(ext)) {
+            return 6;
+        }
+        return 7;
+    }
 }
