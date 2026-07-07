@@ -3,6 +3,7 @@ package com.ff.mycloud.redis;
 import com.ff.mycloud.common.constant.CommonConstants;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.StringCodec;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -78,7 +79,7 @@ public class LoginFailRedis {
      * @return long[3]: [0]=blocked(1拦截/0放行), [1]=失败次数, [2]=建议等待秒数
      */
     public long[] recordAndCheck(Long userId, String ip) {
-        List<Object> result = redisClient.getScript().eval(
+        List<Object> result = redisClient.getScript(StringCodec.INSTANCE).eval(
                 RScript.Mode.READ_WRITE,
                 LUA_SCRIPT,
                 RScript.ReturnType.MULTI,
@@ -86,10 +87,10 @@ public class LoginFailRedis {
                         CommonConstants.LoginFail.ACCOUNT_KEY_PREFIX + userId,
                         CommonConstants.LoginFail.IP_KEY_PREFIX + ip
                 ),
-                CommonConstants.LoginFail.ACCOUNT_MAX_FAIL,
-                CommonConstants.LoginFail.IP_MAX_FAIL,
-                CommonConstants.LoginFail.ACCOUNT_LOCK_SECONDS,
-                CommonConstants.LoginFail.IP_WINDOW_SECONDS
+                String.valueOf(CommonConstants.LoginFail.ACCOUNT_MAX_FAIL),
+                String.valueOf(CommonConstants.LoginFail.IP_MAX_FAIL),
+                String.valueOf(CommonConstants.LoginFail.ACCOUNT_LOCK_SECONDS),
+                String.valueOf(CommonConstants.LoginFail.IP_WINDOW_SECONDS)
         );
         return new long[]{
                 ((Number) result.get(0)).longValue(),
