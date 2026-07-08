@@ -73,7 +73,7 @@ public class FileInfo {
     private LocalDateTime deletedAt;
 
     /** 是否已收藏/星标 */
-    @TableField("is_starred")
+    @TableField("isStarred")
     private Boolean isStarred;
 
     /** 收藏时间 */
