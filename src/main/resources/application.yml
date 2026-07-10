@@ -98,6 +98,7 @@ oss:
   access-key-id: REDACTED_KEY
   access-key-secret: REDACTED_SECRET
   endpoint: oss-cn-hangzhou.aliyuncs.com
+  cdn-endpoint: https://pre.feifei.ltd
   bucket-name: feifeioss
 oauth:
   github:

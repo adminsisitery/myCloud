@@ -14,14 +14,15 @@
     <!-- 查询最近N个文件：JOIN t_file_info 直接返回完整文件信息 -->
     <select id="getRecentFiles" resultType="com.ff.mycloud.model.entity.FileInfo">
         SELECT f.id, f.filename, f.original_filename, f.path, f.file_size, f.file_type,
-               f.sha256_hash, f.file_suffix, f.user_id, f.parent_id, f.is_folder AS isFolder,
-               f.is_deleted AS isDeleted, f.local_file_path AS localFilePath,
+               f.sha256_hash, f.file_suffix, f.user_id, f.parent_id, f.isFolder,
+               f.isDeleted, f.local_file_path AS localFilePath,
                f.created_at AS createdAt, f.updated_at AS updatedAt,
-               f.deleted_at AS deletedAt, f.is_starred AS isStarred, f.starred_at AS starredAt
+               f.deleted_at AS deletedAt, f.isStarred, f.starred_at AS starredAt,
+               f.category_id AS categoryId
         FROM t_recent_access r
         INNER JOIN t_file_info f ON r.file_id = f.id
         WHERE r.user_id = #{userId}
-          AND f.is_deleted = 0
+          AND f.isDeleted = 0
         ORDER BY r.accessed_at DESC
         LIMIT #{limit}
     </select>

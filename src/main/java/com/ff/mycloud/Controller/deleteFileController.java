@@ -33,16 +33,28 @@ public class deleteFileController {
      */
     @DeleteMapping("/batch")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
-    public Result<?> batchDelete(@RequestBody List<Long> ids) {
-        deleteFileService.batchDeleteFile(ids);
+    public Result<?> batchDelete(@RequestParam String ids) {
+        deleteFileService.batchDeleteFile(parseIds(ids));
         return Result.success();
     }
 
     @DeleteMapping("/tureDelete")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
-    public Result<?> tureDelete(@RequestBody List<Long> ids) {
-        deleteFileService.tureDeleteFile(ids);
+    public Result<?> tureDelete(@RequestParam String ids) {
+        deleteFileService.tureDeleteFile(parseIds(ids));
         return Result.success();
+    }
+
+    private List<Long> parseIds(String ids) {
+        String[] parts = ids.split(",");
+        List<Long> result = new java.util.ArrayList<>();
+        for (String p : parts) {
+            String trimmed = p.trim();
+            if (!trimmed.isEmpty()) {
+                result.add(Long.parseLong(trimmed));
+            }
+        }
+        return result;
     }
     /**
      * 删除单个文件

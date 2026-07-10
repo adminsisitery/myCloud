@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import com.aliyun.oss.ClientBuilderConfiguration;
 import com.aliyun.oss.HttpMethod;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
@@ -67,8 +68,18 @@ public class OssStorageServiceImpl implements StorageService {
         String objectName = buildObjectName(path, fileName);
         OSS ossClient = null;
         try {
-            ossClient=getOssClient();
-            ossClient.putObject(ossProProperties.getBucketName(),objectName,file.getInputStream());
+            ossClient = getOssClient();
+
+            ObjectMetadata metadata = new ObjectMetadata();
+            String contentType = file.getContentType();
+            if (contentType == null) {
+                contentType = "application/octet-stream";
+            }
+            metadata.setContentType(contentType);
+            PutObjectRequest putObjectRequest = new PutObjectRequest(
+                    ossProProperties.getBucketName(), objectName,
+                    file.getInputStream(), metadata);
+            ossClient.putObject(putObjectRequest);
         } catch (Exception e) {
             logger.error("Failed to upload file to OSS: bucket={}, objectName={}, error={}", ossProProperties.getBucketName(), objectName, e.getMessage());
             ExceptionUtil.throwBizException(ErrorCode.OSS_UPLOAD_FAILED, e.getMessage());
@@ -106,9 +117,12 @@ public class OssStorageServiceImpl implements StorageService {
             try (FileInputStream inputStream = new FileInputStream(file)) {
                 ObjectMetadata metadata = new ObjectMetadata();
 
-                String contentType = Files.probeContentType(file.toPath());
+                // 优先用前端传的 MIME，Windows 上 probeContentType 经常返回 null
+                String contentType = (fileType != null && !fileType.isEmpty())
+                        ? fileType
+                        : Files.probeContentType(file.toPath());
 
-                if(contentType == null){
+                if (contentType == null || contentType.isEmpty()) {
                     contentType = "application/octet-stream";
                 }
 
@@ -334,25 +348,52 @@ private void closeOssClient(OSS ossClient) {
      * @return 签名URL字符串
      */
     public String generatePresignedUrl(String objectKey, int expirySeconds) {
+        return generatePresignedUrl(objectKey, expirySeconds, null);
+    }
+
+    /**
+     * 生成预览/下载的签名URL（可选覆盖Content-Type）
+     * <p>
+     * 配置了 CDN 域名时，用 CDN 域名作为 endpoint 生成签名（CNAME模式），签名天然有效。
+     * 未配置 CDN 时使用默认 OSS endpoint。
+     * </p>
+     *
+     * @param objectKey     OSS对象Key
+     * @param expirySeconds 签名有效期（秒）
+     * @param mimeType      覆盖的Content-Type（如 image/png），null则不覆盖
+     * @return 签名URL字符串
+     */
+    public String generatePresignedUrl(String objectKey, int expirySeconds, String mimeType) {
         Date date = new Date(System.currentTimeMillis() + expirySeconds * 1000L);
-        OSS ossClient = getOssClient();
-        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(ossProProperties.getBucketName(), objectKey);
-        request.setMethod(HttpMethod.GET);
-        request.setExpiration(date);
 
-        Map<String, String> queryParams = new HashMap<>();
-        queryParams.put("response-content-disposition", "inline");
+        // 如果配置了 CDN 域名，用 CDN 域名作为 endpoint 生成签名，签名天然有效
+        OSS ossClient;
+        if (ossProProperties.getCdnEndpoint() != null && !ossProProperties.getCdnEndpoint().isEmpty()) {
+            ClientBuilderConfiguration config = new ClientBuilderConfiguration();
+            config.setSupportCname(true);
+            ossClient = new OSSClientBuilder().build(
+                    ossProProperties.getCdnEndpoint(),
+                    ossProProperties.getAccessKeyId(),
+                    ossProProperties.getAccessKeySecret(),
+                    config);
+        } else {
+            ossClient = getOssClient();
+        }
 
-        request.setQueryParameter(queryParams);
-        URL url = ossClient.generatePresignedUrl(request);
-        String previewUrl = url.toString()
-                .replace("feifeioss.oss-cn-hangzhou.aliyuncs.com",
-                        "pre.feifei.ltd");
+        try {
+            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(ossProProperties.getBucketName(), objectKey);
+            request.setMethod(HttpMethod.GET);
+            request.setExpiration(date);
 
-        ossClient.shutdown();
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("response-content-disposition", "inline");
+            request.setQueryParameter(queryParams);
 
-        return previewUrl;
-
+            URL url = ossClient.generatePresignedUrl(request);
+            return url.toString();
+        } finally {
+            ossClient.shutdown();
+        }
     }
 
     /**
@@ -396,11 +437,21 @@ private void closeOssClient(OSS ossClient) {
      */
     @Override
     public String initiateMultipartUpload(String objectKey) {
+        return initiateMultipartUpload(objectKey, null);
+    }
+
+    @Override
+    public String initiateMultipartUpload(String objectKey, String contentType) {
         OSS ossClient = null;
         try {
             ossClient = getOssClient();
             InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(
                     ossProProperties.getBucketName(), objectKey);
+            if (contentType != null && !contentType.isEmpty()) {
+                ObjectMetadata metadata = new ObjectMetadata();
+                metadata.setContentType(contentType);
+                request.setObjectMetadata(metadata);
+            }
             InitiateMultipartUploadResult result = ossClient.initiateMultipartUpload(request);
             return result.getUploadId();
         } finally {

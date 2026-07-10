@@ -28,6 +28,8 @@ public class OssProProperties {
     private String accessKeySecret;
     /** OSS 存储桶名称 */
     private String bucketName;
+    /** CDN/自定义域名（仅用于生成预览签名URL），如 pre.feifei.ltd */
+    private String cdnEndpoint;
     /** 是否启用 OSS 存储，默认关闭 */
     private Boolean enabled = false;
 }

@@ -73,6 +73,13 @@ public interface StorageService {
     String initiateMultipartUpload(String objectKey);
 
     /**
+     * 初始化OSS分片上传（指定Content-Type）
+     */
+    default String initiateMultipartUpload(String objectKey, String contentType) {
+        return initiateMultipartUpload(objectKey);
+    }
+
+    /**
      * 上传单个分片到OSS
      *
      * @param objectKey   OSS对象Key

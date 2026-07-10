@@ -81,8 +81,9 @@ public class PreviewController {
             throw new BusinessException(ErrorCode.FILE_NOT_SUPPORT_PREVIEW);
         }
 
-        // 生成 OSS 预签名 URL（5分钟有效期）
-        String url = ossStorageService.generatePresignedUrl(fileInfo.getPath(), 300);
+        // 生成 OSS 预签名 URL（5分钟有效期），覆盖 Content-Type 解决 OSS 上旧文件类型为 octet-stream 的问题
+        String mimeType = FileTypeUtil.getContentTypeFromFileSuffix(suffix);
+        String url = ossStorageService.generatePresignedUrl(fileInfo.getPath(), 300, mimeType);
 
         String fullName = fileInfo.getFilename();
         if (suffix != null && !suffix.isEmpty()) {

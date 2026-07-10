@@ -71,7 +71,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
 
         // 3. 初始化OSS分片上传
         String ossUploadId = storageServiceFactory.getStorageService()
-                .initiateMultipartUpload(objectKey);
+                .initiateMultipartUpload(objectKey, chunkFile.getFileType());
 
         // 4. 生成自定义uploadId，组装ChunkTask写入Redis
         String uploadId = UUID.randomUUID().toString().replace("-", "");

@@ -252,7 +252,7 @@ public class FileServiceImpl implements FileService {
         fileDocument.setFileType(fileInfo.getFileType());
         fileDocument.setUserId(currentUserId);
         rabbitMqService.sendInsertMessage(fileDocument);
-        sendOpLog(OperationLog.OP_UPLOAD, fileInfo.getId(),
+        sendOpLog(currentUserId, OperationLog.OP_UPLOAD, fileInfo.getId(),
                 fileDocument.getFileName(), fileInfo.getFileSize(), null);
     }
 
@@ -918,8 +918,12 @@ public class FileServiceImpl implements FileService {
      * @param extraInfo 额外描述信息（如"秒传"、原文件名等）
      */
     private void sendOpLog(String operation, Long fileId, String filename, Long fileSize, String extraInfo) {
+        sendOpLog(UserContext.getCurrentUserId(), operation, fileId, filename, fileSize, extraInfo);
+    }
+
+    private void sendOpLog(Long userId, String operation, Long fileId, String filename, Long fileSize, String extraInfo) {
         OperationLog log = new OperationLog();
-        log.setUserId(UserContext.getCurrentUserId());
+        log.setUserId(userId);
         log.setOperation(operation);
         log.setFileId(fileId);
         log.setFilename(filename);

@@ -1,6 +1,5 @@
 package com.ff.mycloud.repositorys;
 
-import co.elastic.clients.elasticsearch.xpack.usage.Sql;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ff.mycloud.model.entity.FileObject;
 import org.apache.ibatis.annotations.Insert;
@@ -18,15 +17,17 @@ import org.apache.ibatis.annotations.Options;
 public interface FileObjectMapper extends BaseMapper<FileObject> {
 
     /**
-     * 创建文件对象记录
-     * 功能：向数据库插入一条文件对象记录，并自动回填生成的主键ID
+     * 创建文件对象记录（哈希冲突时引用计数+1）
+     * 功能：向数据库插入一条文件对象记录，并自动回填生成的主键ID。
+     * 如果 (sha256_hash, file_size) 已存在则递增 ref_count 而非报错。
      *
-     * @param fileObject 文件对象实体，包含文件哈希、大小、存储路径、类型、后缀、状态、引用计数等信息
+     * @param fileObject 文件对象实体
      */
     @Insert("INSERT INTO t_file_object " +
             "(sha256_hash, file_size, storage_path, file_type, file_suffix, status, ref_count, created_at, updated_at) " +
             "VALUES " +
-            "(#{sha256Hash}, #{fileSize}, #{storagePath}, #{fileType}, #{fileSuffix}, #{status}, #{refCount}, #{createdAt}, #{updatedAt})")
-    @Options(useGeneratedKeys = true, keyProperty = "id") // 自动回填主键ID
+            "(#{sha256Hash}, #{fileSize}, #{storagePath}, #{fileType}, #{fileSuffix}, #{status}, #{refCount}, #{createdAt}, #{updatedAt}) " +
+            "ON DUPLICATE KEY UPDATE ref_count = ref_count + 1, updated_at = #{updatedAt}")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
     public void createFileObject(FileObject fileObject);
 }
