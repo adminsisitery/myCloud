@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: cloud-drive
+  config:
+    import:
+      - optional:classpath:local_application.yml
   # ===== ES 暂未启用 =====
   # elasticsearch:
   #   uris: http://localhost:9200

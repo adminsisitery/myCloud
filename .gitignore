@@ -1,5 +1,6 @@
 
 application.yml
+local_application.yml
 
 HELP.md
 target/
