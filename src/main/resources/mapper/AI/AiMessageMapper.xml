@@ -4,7 +4,7 @@
 
 <mapper namespace="com.ff.mycloud.ai.mapper.AiMessageMapper">
 
-    <select id="findByMsgId" resultType="com.ff.mycloud.ai.model.entity.AiMessages">
+    <select id="findByMsgId" resultType="com.ff.mycloud.ai.model.entity.AiMessage">
         SELECT * FROM t_ai_message WHERE conversation_id = #{memId} ORDER BY create_time ASC
     </select>
 

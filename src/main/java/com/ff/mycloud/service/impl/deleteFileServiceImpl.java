@@ -7,6 +7,7 @@ import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.OperationLog;
+import com.ff.mycloud.model.entity.PgSender;
 import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.model.vo.TrashListVO;
 import com.ff.mycloud.mq.producer.RabbitMqService;
@@ -296,6 +297,13 @@ public class deleteFileServiceImpl implements DeleteFileService {
             }
 
             fileInfoMapperService.removeById(file.getId());
+
+            // 同步删除 PGVector 向量
+            PgSender pgs = PgSender.builder()
+                    .fileId(file.getId())
+                    .userId(file.getUserId())
+                    .text(null).build();
+            rabbitMqService.sendDeletePG(pgs);
         }
 
         log.info("清空回收站完成：用户{}，共清理{}条记录", currentUserId, trashFiles.size());
@@ -369,6 +377,13 @@ public class deleteFileServiceImpl implements DeleteFileService {
         FileDocument fd = new FileDocument();
         fd.setId(file.getId());
         rabbitMqService.sendDeleteMessage(fd);
+
+        // 同步删除 PGVector 向量
+        PgSender pgs = PgSender.builder()
+                .fileId(file.getId())
+                .userId(file.getUserId())
+                .text(null).build();
+        rabbitMqService.sendDeletePG(pgs);
 
         if (!file.getIsFolder()) {
             String name = file.getFilename();

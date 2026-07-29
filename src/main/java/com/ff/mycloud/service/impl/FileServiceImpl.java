@@ -18,17 +18,23 @@ import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.repositorys.FileRecentAccess;
 import com.ff.mycloud.service.*;
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.parser.apache.tika.ApacheTikaDocumentParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.boot.actuate.health.HttpCodeStatusMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -58,6 +64,9 @@ public class FileServiceImpl implements FileService {
     FileInfoMapperService fileInfoMapperService;
     UserCenterMapperService userCenterMapperService;
     RabbitMqService rabbitMqService;
+    TransactionTemplate transactionTemplate;
+
+    ApacheTikaDocumentParser tikaParser = new ApacheTikaDocumentParser();
 
     public FileServiceImpl(StorageServiceFactory storageServiceFactory,
                            UserCenterMapperService userCenterMapperService,
@@ -67,7 +76,8 @@ public class FileServiceImpl implements FileService {
                            UserMapperServiceImpl userMapperServiceImpl,
                            UpLoadProgressService upLoadProgressService,
                            RabbitMqService rabbitMqService,
-                           FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper, FileRecentAccess fileRecentAccess) {
+                           FileObjectMapper fileObjectMapper, HttpCodeStatusMapper healthHttpCodeStatusMapper, FileRecentAccess fileRecentAccess,
+                           TransactionTemplate transactionTemplate) {
         this.storageServiceFactory = storageServiceFactory;
         this.fileMapper = fileMapper;
         this.fileInfoMapperService = fileInfoMapperService;
@@ -79,6 +89,7 @@ public class FileServiceImpl implements FileService {
         this.fileObjectMapper = fileObjectMapper;
         this.healthHttpCodeStatusMapper = healthHttpCodeStatusMapper;
         this.fileRecentAccess = fileRecentAccess;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /**
@@ -110,29 +121,42 @@ public class FileServiceImpl implements FileService {
                 return newFileInfo.getPath();
             }
 
-            //不存在正常上传
+            //不存在正常上传 —— OSS 先上传
             StorageService storageService = storageServiceFactory.getStorageService();
-            //得到文件的路径根据parentID 得到父路径 还没有文件名！！！！！
             String uploadPath = getUploadPath(parentId, currentUser);
-            //上传并得到路径和文件名
             String filePath = storageService.UploadFile(file, uploadPath);
-            String localFilePath="";
-            //计算在文件夹里创建文件的路径
-            if (parentId!=null){
-                //有父级文件夹
+
+            String localFilePath;
+            if (parentId != null) {
                 FileInfo byId = fileInfoMapperService.getById(parentId);
-                if(byId!=null) {
+                if (byId != null) {
                     localFilePath = byId.getLocalFilePath() + file.getOriginalFilename();
+                } else {
+                    localFilePath = "";
                 }
+            } else {
+                localFilePath = "";
             }
 
-            //进行fileInfo对象拼装
-            FileInfo fileInfo = fileMapper.toFileInfo(file, filePath,currentUser.getId(), parentId,localFilePath);
-            fileInfo.setCategoryId(categoryFiles(fileInfo));
-            //保存到数据库中
-//            return fileInfoRepository.save(fileInfo).getPath();
-            fileInfoMapperService.save(fileInfo);
-            return fileInfo.getPath();
+            try {
+                // DB 操作在事务中执行，失败自动回滚
+                FileInfo fileInfo = transactionTemplate.execute(status -> {
+                    FileInfo fi = fileMapper.toFileInfo(file, filePath, currentUser.getId(), parentId, localFilePath);
+                    fi.setCategoryId(categoryFiles(fi));
+                    fileInfoMapperService.save(fi);
+                    return fi;
+                });
+                return fileInfo != null ? fileInfo.getPath() : null;
+            } catch (Exception e) {
+                // DB 保存失败，删掉已上传的 OSS 文件作为补偿
+                log.error("DB save failed after OSS upload, deleting orphan file: {}", filePath, e);
+                try {
+                    storageService.deleteFile(filePath);
+                } catch (Exception ignored) {
+                    log.warn("Failed to delete orphan OSS file: {}", filePath);
+                }
+                throw e;
+            }
         }
         return null;
     }
@@ -180,7 +204,7 @@ public class FileServiceImpl implements FileService {
      * @throws BusinessException 当文件不存在或不是常规文件时抛出
      */
     @Override
-    public void uploadFileWithProgressFromPath(String fileType, String absolutePath, String originalFilename, long size, Long parentId, String taskId, Long currentUserId) {
+    public void uploadFileWithProgressFromPath(String fileType, String absolutePath, String originalFilename, long size, Long parentId, String taskId, Long currentUserId) throws IOException {
         //根据用户id获得用户信息
         User currentUser = userMapperServiceImpl.findOneByUserId(currentUserId);
 
@@ -214,46 +238,88 @@ public class FileServiceImpl implements FileService {
             handleFastUpload(originalFilename,size,existingFile,fileHashSHA256,parentId,taskId,currentUser);
             return;
         }
-        //不存在文件正常上传
+        //不存在文件正常上传 —— OSS 先上传
         String uploadPath = getUploadPath(parentId, currentUser);
         StorageService storageService = storageServiceFactory.getStorageService();
-        String path = storageService.uploadFileWithProgressFromPath(file, uploadPath, taskId, originalFilename, size,fileType);
+        String path = storageService.uploadFileWithProgressFromPath(file, uploadPath, taskId, originalFilename, size, fileType);
 
         //新增保存后缀
-        String suffix="";
-        String fileNameWithoutSuffix="";
+        String suffix;
+        String fileNameWithoutSuffix;
         int i = originalFilename.lastIndexOf(".");
-        if (i!=-1){
-            suffix = originalFilename.substring(i+1);
+        if (i != -1) {
+            suffix = originalFilename.substring(i + 1);
             fileNameWithoutSuffix = originalFilename.substring(0, i);
+        } else {
+            fileNameWithoutSuffix = "";
+            suffix = "";
         }
 
-        String localFilePath="";
-        if (parentId!=null){
+        String localFilePath;
+        if (parentId != null) {
             FileInfo byId = fileInfoMapperService.getById(parentId);
-            if(byId!=null) {
+            if (byId != null) {
                 localFilePath = byId.getLocalFilePath() + originalFilename;
+            } else {
+                localFilePath = "";
             }
+        } else {
+            localFilePath = "";
         }
 
-        // 组装文件信息和文件对象并保存
-        FileInfo fileInfo = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256,suffix,fileType,originalFilename,localFilePath);
-        fileInfo.setCategoryId(categoryFiles(fileInfo));
-        FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
-        fileInfoMapperService.save(fileInfo);
-        fileObjectMapper.createFileObject(fileObject);//上传完成保存保存object表
-        // todo 上传完成保存文件的分片hash信息
+        try {
+            // DB 操作在事务中执行，失败自动回滚
+            FileInfo fileInfo = transactionTemplate.execute(status -> {
+                FileInfo fi = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256, suffix, fileType, originalFilename, localFilePath);
+                fi.setCategoryId(categoryFiles(fi));
+                FileObject fo = fileMapper.toFileObject(fi, FileObjectStatus.AVAILABLE);
+                fileInfoMapperService.save(fi);
+                fileObjectMapper.createFileObject(fo);
+                return fi;
+            });
 
-        createSample(file,fileObject);
-        //上传完成 异步同步ES
-        FileDocument fileDocument = new FileDocument();
-        fileDocument.setId(fileInfo.getId());
-        fileDocument.setFileName(fileInfo.getFilename()+ "." + fileInfo.getFileSuffix());
-        fileDocument.setFileType(fileInfo.getFileType());
-        fileDocument.setUserId(currentUserId);
-        rabbitMqService.sendInsertMessage(fileDocument);
-        sendOpLog(currentUserId, OperationLog.OP_UPLOAD, fileInfo.getId(),
-                fileDocument.getFileName(), fileInfo.getFileSize(), null);
+            if (fileInfo == null) return;
+
+            // 异步同步 PGVector（传原始文本，分片在消费者做）
+            if (isDocumentType(fileInfo.getFileSuffix())) {
+                Document document = parseLocalFile(file);
+                PgSender pgs = PgSender.builder()
+                        .fileId(fileInfo.getId())
+                        .userId(currentUserId)
+                        .text(document.text())
+                        .build();
+                rabbitMqService.sendInsertPG(pgs);
+            }
+
+            // 异步同步 ES
+            FileDocument fileDocument = new FileDocument();
+            fileDocument.setId(fileInfo.getId());
+            fileDocument.setFileName(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+            fileDocument.setFileType(fileInfo.getFileType());
+            fileDocument.setUserId(currentUserId);
+            rabbitMqService.sendInsertMessage(fileDocument);
+            sendOpLog(currentUserId, OperationLog.OP_UPLOAD, fileInfo.getId(),
+                    fileDocument.getFileName(), fileInfo.getFileSize(), null);
+        } catch (Exception e) {
+            // DB 保存失败，删掉已上传的 OSS 文件作为补偿
+            log.error("DB save failed after OSS upload, deleting orphan file: {}", path, e);
+            try {
+                storageService.deleteFile(path);
+            } catch (Exception ignored) {
+                log.warn("Failed to delete orphan OSS file: {}", path);
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 判断是不是可以向量化的文件
+     * @param suffix
+     * @return
+     */
+    private boolean isDocumentType(String suffix) {
+        return Set.of("pdf", "doc", "docx", "txt", "md", "xlsx", "pptx")
+                .contains(suffix != null ? suffix.toLowerCase() : "");
     }
 
     /**
@@ -264,6 +330,12 @@ public class FileServiceImpl implements FileService {
      */
     private void createSample(File file, FileObject fileObject) {
 
+    }
+
+    public Document parseLocalFile(File file) throws IOException {
+        try (InputStream is = new FileInputStream(file)) {
+            return tikaParser.parse(is);
+        }
     }
 
     /**
@@ -777,7 +849,7 @@ public class FileServiceImpl implements FileService {
         fileDocument.setId(newFileInfo.getId());
         fileDocument.setFileName(newFileInfo.getFilename()+ "." + newFileInfo.getFileSuffix());
         fileDocument.setFileType(newFileInfo.getFileType());
-        fileDocument.setUserId(UserContext.getCurrentUserId());
+        fileDocument.setUserId(currentUser.getId());
         rabbitMqService.sendInsertMessage(fileDocument);
         sendOpLog(OperationLog.OP_UPLOAD, newFileInfo.getId(),
                 fileDocument.getFileName(), newFileInfo.getFileSize(), "秒传");

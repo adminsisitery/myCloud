@@ -1,6 +1,11 @@
 server:
   port: 8080
 
+logging:
+  level:
+    dev.langchain4j: DEBUG
+    com.ff.mycloud.ai: DEBUG
+
 spring:
   application:
     name: cloud-drive
@@ -119,3 +124,16 @@ mybatis-plus:
 #  Mysql / ES
 File:
   search: Mysql
+
+# AI 配置
+ai:
+  api-key: ${AI_API_KEY:sk-ws-H.EIRMHMY.u3Nl.MEQCIAijQTHX_JIKBUnBOWO_124wENDcahl9BDn8dyJl-5KlAiASYDt8Frbcoszg__2PsNsC9JL1ZZwxejWbpYYO5Ud_Og}
+  base-url: https://api.deepseek.com
+  model: deepseek-chat
+  # 通义 Embedding（独立于 chat）
+  embedding-base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  embedding-api-key: sk-ws-H.EIRMHMY.u3Nl.MEQCIAijQTHX_JIKBUnBOWO_124wENDcahl9BDn8dyJl-5KlAiASYDt8Frbcoszg__2PsNsC9JL1ZZwxejWbpYYO5Ud_Og
+  embedding-model: text-embedding-v4
+  embedding-dimensions: 1536
+  timeout: 120s
+  tavily-api-key:

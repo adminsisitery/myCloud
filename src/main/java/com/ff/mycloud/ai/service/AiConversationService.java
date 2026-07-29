@@ -1,5 +1,6 @@
 package com.ff.mycloud.ai.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ff.mycloud.ai.model.dto.RenameRequest;
 import com.ff.mycloud.ai.model.vo.ConversationVO;
 import com.ff.mycloud.ai.model.vo.MessageVO;
@@ -12,10 +13,14 @@ public interface AiConversationService {
 
     List<ConversationVO> getConversationList();
 
+    Page<ConversationVO> getConversationList(int page, int size);
+
     void renameConversation(RenameRequest renameRequest);
 
     void deleteConversation(Long conversationId);
 
     List<MessageVO> getMessageList(Long conversationId);
+
+    Page<MessageVO> getMessageList(Long conversationId, int page, int size);
 
 }

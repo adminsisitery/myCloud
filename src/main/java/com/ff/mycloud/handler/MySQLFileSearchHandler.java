@@ -29,7 +29,12 @@ public class MySQLFileSearchHandler implements FileSearchHandler {
 
     @Override
     public List<FileListVO> searchFiles(String keyword) {
-        List<FileInfo> fileInfos = fileInfoMapperService.findBykeyWord(keyword, UserContext.getCurrentUserId());
+        return searchFiles(keyword, UserContext.getCurrentUserId());
+    }
+
+    @Override
+    public List<FileListVO> searchFiles(String keyword, Long userId) {
+        List<FileInfo> fileInfos = fileInfoMapperService.findBykeyWord(keyword, userId);
         return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 }

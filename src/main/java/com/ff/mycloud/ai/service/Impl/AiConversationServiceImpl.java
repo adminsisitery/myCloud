@@ -1,6 +1,7 @@
 package com.ff.mycloud.ai.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
 import com.ff.mycloud.ai.model.dto.RenameRequest;
@@ -45,6 +46,12 @@ public class AiConversationServiceImpl implements AiConversationService {
     }
 
     @Override
+    public Page<ConversationVO> getConversationList(int page, int size) {
+        Long userId = UserContext.getCurrentUserId();
+        return aiConversationMapper.getConversationListByUserId(new Page<>(page, size), userId);
+    }
+
+    @Override
     public void renameConversation(RenameRequest request) {
         Long userId = UserContext.getCurrentUserId();
         AiConversation conv = aiConversationMapper.selectById(request.getConversationId());
@@ -74,6 +81,18 @@ public class AiConversationServiceImpl implements AiConversationService {
     @Override
     public List<MessageVO> getMessageList(Long conversationId) {
         Long userId = UserContext.getCurrentUserId();
+        checkConversationAccess(userId, conversationId);
+        return aiConversationMapper.selectByCId(conversationId);
+    }
+
+    @Override
+    public Page<MessageVO> getMessageList(Long conversationId, int page, int size) {
+        Long userId = UserContext.getCurrentUserId();
+        checkConversationAccess(userId, conversationId);
+        return aiConversationMapper.selectByCId(new Page<>(page, size), conversationId);
+    }
+
+    private void checkConversationAccess(Long userId, Long conversationId) {
         AiConversation conv = aiConversationMapper.selectById(conversationId);
         if (conv == null) {
             throw new IllegalArgumentException("会话不存在");
@@ -81,6 +100,5 @@ public class AiConversationServiceImpl implements AiConversationService {
         if (!conv.getUserId().equals(userId)) {
             throw new IllegalArgumentException("无权访问该会话");
         }
-        return aiConversationMapper.selectByCId(conversationId);
     }
 }

@@ -36,6 +36,13 @@ public class AiConversation {
     @TableField("model")
     private String model;
 
+    @TableField("count")
+    private Long count;
+
+    /** 累计 token 消耗 */
+    @TableField("total_tokens")
+    private Long totalTokens;
+
     /** 会话创建时间 */
     @TableField("create_time")
     private LocalDateTime createTime;

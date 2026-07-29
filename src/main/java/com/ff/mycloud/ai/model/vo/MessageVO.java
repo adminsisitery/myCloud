@@ -19,6 +19,12 @@ public class MessageVO {
     /** 对话内容 */
     private String content;
 
+    /** 输入 token 数 */
+    private Integer inputTokens;
+
+    /** 输出 token 数 */
+    private Integer outputTokens;
+
     /** 创建时间 */
     private LocalDateTime createTime;
 

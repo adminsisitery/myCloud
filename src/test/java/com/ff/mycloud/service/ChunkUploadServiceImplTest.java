@@ -104,7 +104,7 @@ class ChunkUploadServiceImplTest {
         ChunkFile input = buildChunkFile();
 
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString())).thenReturn(OSS_UPLOAD_ID);
+        when(storageService.initiateMultipartUpload(anyString(), anyString())).thenReturn(OSS_UPLOAD_ID);
         when(chunkUploadMapper.toChunkTask(eq(input), anyString())).thenReturn(new ChunkTask());
 
         Result<ChunkVO> result = service.initUpload(input);
@@ -115,7 +115,7 @@ class ChunkUploadServiceImplTest {
         assertEquals(OSS_UPLOAD_ID, result.getData().getOssUploadId());
 
         verify(userCenterMapperService).reserveSpace(USER_ID, input.getFileSize());
-        verify(storageService).initiateMultipartUpload(anyString());
+        verify(storageService).initiateMultipartUpload(anyString(), anyString());
         verify(chunkUploadRedis).saveTask(any(ChunkTask.class));
         verify(chunkUploadMapper).toChunkTask(eq(input), anyString());
     }
@@ -139,7 +139,7 @@ class ChunkUploadServiceImplTest {
     void init_shouldHaveDistinctIds() {
         ChunkFile input = buildChunkFile();
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString())).thenReturn(OSS_UPLOAD_ID);
+        when(storageService.initiateMultipartUpload(anyString(), anyString())).thenReturn(OSS_UPLOAD_ID);
         when(chunkUploadMapper.toChunkTask(eq(input), anyString())).thenReturn(new ChunkTask());
 
         Result<ChunkVO> result = service.initUpload(input);
@@ -153,12 +153,12 @@ class ChunkUploadServiceImplTest {
         ChunkFile input = buildChunkFile();
         input.setFileName("video.mp4");
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString())).thenReturn(OSS_UPLOAD_ID);
+        when(storageService.initiateMultipartUpload(anyString(), anyString())).thenReturn(OSS_UPLOAD_ID);
         when(chunkUploadMapper.toChunkTask(eq(input), anyString())).thenReturn(new ChunkTask());
 
         service.initUpload(input);
 
-        verify(storageService).initiateMultipartUpload(argThat(k -> k != null && k.endsWith(".mp4")));
+        verify(storageService).initiateMultipartUpload(argThat(k -> k != null && k.endsWith(".mp4")), anyString());
     }
 
     @Test
@@ -167,13 +167,13 @@ class ChunkUploadServiceImplTest {
         ChunkFile input = buildChunkFile();
         input.setFileName("noext");
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString())).thenReturn(OSS_UPLOAD_ID);
+        when(storageService.initiateMultipartUpload(anyString(), anyString())).thenReturn(OSS_UPLOAD_ID);
         when(chunkUploadMapper.toChunkTask(eq(input), anyString())).thenReturn(new ChunkTask());
 
         Result<ChunkVO> result = service.initUpload(input);
 
         assertEquals(CommonConstants.StatusCode.SUCCESS, result.getCode().intValue());
-        verify(storageService).initiateMultipartUpload(argThat(k -> k != null && !k.endsWith(".")));
+        verify(storageService).initiateMultipartUpload(argThat(k -> k != null && !k.endsWith(".")), anyString());
     }
 
     @Test
@@ -181,7 +181,7 @@ class ChunkUploadServiceImplTest {
     void init_shouldPropagateOssException() {
         ChunkFile input = buildChunkFile();
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString()))
+        when(storageService.initiateMultipartUpload(anyString(), anyString()))
                 .thenThrow(new RuntimeException("OSS连接超时"));
 
         assertThrows(RuntimeException.class, () -> service.initUpload(input));
@@ -193,7 +193,7 @@ class ChunkUploadServiceImplTest {
     void init_shouldSetTimestamps() {
         ChunkFile input = buildChunkFile();
         when(userCenterMapperService.reserveSpace(USER_ID, input.getFileSize())).thenReturn(true);
-        when(storageService.initiateMultipartUpload(anyString())).thenReturn(OSS_UPLOAD_ID);
+        when(storageService.initiateMultipartUpload(anyString(), anyString())).thenReturn(OSS_UPLOAD_ID);
         when(chunkUploadMapper.toChunkTask(eq(input), anyString())).thenReturn(new ChunkTask());
 
         service.initUpload(input);

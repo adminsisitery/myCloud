@@ -2,6 +2,10 @@ package com.ff.mycloud.mq.producer;
 
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.OperationLog;
+import com.ff.mycloud.model.entity.PgSender;
+import dev.langchain4j.data.segment.TextSegment;
+
+import java.util.List;
 
 /**
  * RabbitMQ消息发送服务接口
@@ -43,4 +47,13 @@ public interface RabbitMqService {
      * @param operationLog 操作日志实体，包含操作类型、用户ID、目标文件等信息
      */
     void sendLogMessage(OperationLog operationLog);
+
+    /**
+     * 发送文件新增pg向量
+     * @param segments
+     */
+
+    void sendInsertPG(PgSender pgs);
+
+    void sendDeletePG(PgSender pgs);
 }

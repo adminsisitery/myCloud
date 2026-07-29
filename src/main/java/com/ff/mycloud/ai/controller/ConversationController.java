@@ -1,5 +1,6 @@
 package com.ff.mycloud.ai.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ff.mycloud.ai.model.dto.RenameRequest;
 import com.ff.mycloud.ai.model.vo.ConversationVO;
 import com.ff.mycloud.ai.model.vo.MessageVO;
@@ -20,10 +21,18 @@ public class ConversationController {
         this.conversationService = conversationService;
     }
 
-    /** 获取当前用户会话列表 */
+    /** 获取当前用户会话列表（不分页） */
     @GetMapping
     public Result<List<ConversationVO>> getConversationList() {
         return Result.success(conversationService.getConversationList());
+    }
+
+    /** 获取当前用户会话列表（分页） */
+    @GetMapping("/page")
+    public Result<Page<ConversationVO>> getConversationListPaginated(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return Result.success(conversationService.getConversationList(page, size));
     }
 
     /** 创建新会话 */
@@ -48,9 +57,18 @@ public class ConversationController {
         return Result.success();
     }
 
-    /** 获取会话的消息列表 */
+    /** 获取会话的消息列表（不分页） */
     @GetMapping("/{id}/messages")
     public Result<List<MessageVO>> getMessageList(@PathVariable Long id) {
         return Result.success(conversationService.getMessageList(id));
+    }
+
+    /** 获取会话的消息列表（分页，按时间倒序） */
+    @GetMapping("/{id}/messages/page")
+    public Result<Page<MessageVO>> getMessageListPaginated(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return Result.success(conversationService.getMessageList(id, page, size));
     }
 }

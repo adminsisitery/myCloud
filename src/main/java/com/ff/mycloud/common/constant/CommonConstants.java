@@ -109,4 +109,11 @@ public class CommonConstants {
         public static final int N = 10;
     }
 
+    public static class PG {
+        public static final String TOPIC_EXCHANGE = "pg.topic";
+        public static final String INSERT_KEY = "PG_insert";
+        public static final String INSERT_QUEUE = "pg.insert.queue";
+        public static final String DELETE_KEY = "PG_delete";
+        public static final String DELETE_QUEUE = "pg.delete.queue";
+    }
 } 

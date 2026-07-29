@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Data
 @TableName("t_ai_message")
-public class AiMessages {
+public class AiMessage {
     /** 主键，自增ID */
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
@@ -27,6 +27,14 @@ public class AiMessages {
     /** 对话内容 */
     @TableField("content")
     private String content;
+
+    /** 输入 token 数（仅 ASSISTANT 消息有值） */
+    @TableField("input_tokens")
+    private Integer inputTokens;
+
+    /** 输出 token 数（仅 ASSISTANT 消息有值） */
+    @TableField("output_tokens")
+    private Integer outputTokens;
 
     /** 创建时间 */
     @TableField("create_time")

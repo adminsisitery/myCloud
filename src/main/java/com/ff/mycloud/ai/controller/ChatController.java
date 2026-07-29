@@ -11,7 +11,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/api/ai")
 public class ChatController {
 
-    AiChatService aiChatService;
+    private final AiChatService aiChatService;
 
     public ChatController(AiChatService aiChatService) {
         this.aiChatService = aiChatService;

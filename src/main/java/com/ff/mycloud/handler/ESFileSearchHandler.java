@@ -32,4 +32,13 @@ public class ESFileSearchHandler implements FileSearchHandler {
         List<FileInfo> fileInfos = fileSearchService.searchFile(keyword);
         return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
+
+    @Override
+    public List<FileListVO> searchFiles(String keyword, Long userId) {
+        List<FileInfo> fileInfos = fileSearchService.searchFile(keyword);
+        return fileInfos.stream()
+                .filter(f -> f.getUserId().equals(userId))
+                .map(fileMapper::toFileListVO)
+                .collect(Collectors.toList());
+    }
 }

@@ -3,44 +3,78 @@ package com.ff.mycloud.ai.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
+import com.ff.mycloud.ai.memory.DbChatMemoryStore;
 import com.ff.mycloud.ai.model.dto.ChatRequest;
 import com.ff.mycloud.ai.model.entity.AiConversation;
-import com.ff.mycloud.ai.model.entity.AiMessages;
+import com.ff.mycloud.ai.model.entity.AiMessage;
 import com.ff.mycloud.ai.service.AiChatService;
 import com.ff.mycloud.ai.service.ChatAssistant;
+import com.ff.mycloud.ai.tool.CloudDriveTools;
 import com.ff.mycloud.common.util.UserContext;
+import com.ff.mycloud.handler.FileSearchHandler;
+import com.ff.mycloud.repositorys.FileRecentAccess;
+import com.ff.mycloud.service.FileInfoMapperService;
+import com.ff.mycloud.service.UserCenterMapperService;
+import dev.langchain4j.memory.ChatMemory;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
+import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.store.embedding.EmbeddingStore;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
-/**
- * AI 聊天服务实现。
- * <p>
- * 使用 LangChain4j AiServices（{@link ChatAssistant}）处理对话编排，
- * 将 TokenStream 桥接到 SseEmitter 实现流式输出。
- * AiServices 自动注入 System Prompt、管理 ChatMemory、加载历史上下文。
- * </p>
- */
+import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
+
 @Service
 public class AiChatServiceImpl implements AiChatService {
 
-    private final ChatAssistant chatAssistant;
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper aiMessageMapper;
     private final ObjectMapper objectMapper;
+    private final OpenAiChatModel chatModel;
+    private final OpenAiStreamingChatModel streamingModel;
+    private final FileInfoMapperService fileInfoService;
+    private final FileSearchHandler fileSearchHandler;
+    private final UserCenterMapperService userCenterService;
+    private final FileRecentAccess fileRecentAccess;
+    private final EmbeddingModel embeddingModel;
+    private final EmbeddingStore embeddingStore;
+    private final DbChatMemoryStore chatMemoryStore;
 
-    public AiChatServiceImpl(ChatAssistant chatAssistant,
-                             AiConversationMapper conversationMapper,
+    public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
-                             ObjectMapper objectMapper) {
-        this.chatAssistant = chatAssistant;
+                             ObjectMapper objectMapper,
+                             OpenAiChatModel chatModel,
+                             OpenAiStreamingChatModel streamingModel,
+                             FileInfoMapperService fileInfoService,
+                             FileSearchHandler fileSearchHandler,
+                             UserCenterMapperService userCenterService,
+                             FileRecentAccess fileRecentAccess,
+                             EmbeddingModel embeddingModel,
+                             EmbeddingStore embeddingStore,
+                             DbChatMemoryStore chatMemoryStore) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.objectMapper = objectMapper;
+        this.chatModel = chatModel;
+        this.streamingModel = streamingModel;
+        this.fileInfoService = fileInfoService;
+        this.fileSearchHandler = fileSearchHandler;
+        this.userCenterService = userCenterService;
+        this.fileRecentAccess = fileRecentAccess;
+        this.embeddingModel = embeddingModel;
+        this.embeddingStore = embeddingStore;
+        this.chatMemoryStore = chatMemoryStore;
     }
 
     @Override
@@ -50,17 +84,20 @@ public class AiChatServiceImpl implements AiChatService {
         Long conversationId = request.getConversationId();
 
         // ===== 会话校验/创建 =====
+        final AiConversation conv;
         if (conversationId == null) {
-            AiConversation conv = new AiConversation();
-            conv.setUserId(userId);
-            conv.setTitle(userMessage.length() > 50
+            AiConversation newConv = new AiConversation();
+            newConv.setUserId(userId);
+            newConv.setTitle(userMessage.length() > 50
                     ? userMessage.substring(0, 50) + "..."
                     : userMessage);
-            conv.setModel("deepseek-chat");
-            conversationMapper.insert(conv);
-            conversationId = conv.getId();
+            newConv.setModel("deepseek-chat");
+            newConv.setCount(0L);
+            conversationMapper.insert(newConv);
+            conversationId = newConv.getId();
+            conv = newConv;
         } else {
-            AiConversation conv = conversationMapper.selectById(conversationId);
+            conv = conversationMapper.selectById(conversationId);
             if (conv == null) {
                 throw new IllegalArgumentException("会话不存在");
             }
@@ -70,17 +107,42 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         final Long finalConversationId = conversationId;
+        final boolean isFirstMessage = conv.getCount() == null || conv.getCount() == 0;
+
+        // ===== ChatMemory：从 DB 加载历史，自动管理多轮对话 =====
+        ChatMemory chatMemory = MessageWindowChatMemory.builder()
+                .id(finalConversationId)
+                .maxMessages(40)  // ~20 轮对话
+                .chatMemoryStore(chatMemoryStore)
+                .build();
+
+        // ===== per-request ContentRetriever，userId 过滤，绝对隔离 =====
+        EmbeddingStoreContentRetriever retriever = EmbeddingStoreContentRetriever.builder()
+                .embeddingStore(embeddingStore)
+                .embeddingModel(embeddingModel)
+                .filter(metadataKey("userId").isEqualTo(String.valueOf(userId)))
+                .maxResults(5)
+                .minScore(0.6)
+                .build();
+
+        // ===== 每次请求新建 Tool + AiServices，userId 写死在实例里，绝对隔离 =====
+        ChatAssistant chatAssistant = AiServices.builder(ChatAssistant.class)
+                .streamingChatModel(streamingModel)
+                .chatModel(chatModel)
+                .contentRetriever(retriever)
+                .chatMemory(chatMemory)
+                .tools(new CloudDriveTools(fileInfoService, fileSearchHandler, userCenterService, fileRecentAccess, userId))
+                .build();
 
         // ===== SseEmitter =====
-        SseEmitter emitter = new SseEmitter(60_000L);
+        SseEmitter emitter = new SseEmitter(120_000L);
         emitter.onCompletion(() -> System.out.println("SSE连接正常关闭"));
         emitter.onError(ex -> System.out.println("SSE异常: " + ex.getMessage()));
         emitter.onTimeout(() -> System.out.println("SSE超时"));
 
         StringBuilder fullResponse = new StringBuilder();
 
-        // ===== AiServices 调用 + TokenStream → SseEmitter 桥接 =====
-        TokenStream tokenStream = chatAssistant.chat(finalConversationId, userMessage);
+        TokenStream tokenStream = chatAssistant.chat(userMessage);
 
         tokenStream.onPartialResponse(token -> {
             fullResponse.append(token);
@@ -95,28 +157,49 @@ public class AiChatServiceImpl implements AiChatService {
             try {
                 String assistantContent = fullResponse.toString();
 
-                // 手动持久化用户和 AI 消息（保存完整历史，不依赖 ChatMemoryStore 的截断窗口）
-                AiMessages userMsg = new AiMessages();
+                // ---------- Token 用量 ----------
+                TokenUsage usage = response.tokenUsage();
+                Integer inputTokens = usage != null ? usage.inputTokenCount() : null;
+                Integer outputTokens = usage != null ? usage.outputTokenCount() : null;
+
+                AiMessage userMsg = new AiMessage();
                 userMsg.setConversationId(finalConversationId);
                 userMsg.setRole("USER");
                 userMsg.setContent(userMessage);
                 aiMessageMapper.insert(userMsg);
 
-                AiMessages assistantMsg = new AiMessages();
+                AiMessage assistantMsg = new AiMessage();
                 assistantMsg.setConversationId(finalConversationId);
                 assistantMsg.setRole("ASSISTANT");
                 assistantMsg.setContent(assistantContent);
+                assistantMsg.setInputTokens(inputTokens);
+                assistantMsg.setOutputTokens(outputTokens);
                 aiMessageMapper.insert(assistantMsg);
 
-                // 更新会话时间
+                // 更新会话：计数 + token 累计
                 AiConversation updateConv = new AiConversation();
                 updateConv.setId(finalConversationId);
                 updateConv.setUpdateTime(LocalDateTime.now());
+                long newCount = (conv.getCount() == null ? 0 : conv.getCount()) + 1;
+                updateConv.setCount(newCount);
+                long totalTokens = usage != null ? usage.totalTokenCount() : 0;
+                long prevTotal = conv.getTotalTokens() != null ? conv.getTotalTokens() : 0;
+                updateConv.setTotalTokens(prevTotal + totalTokens);
                 conversationMapper.updateById(updateConv);
+
+                if (isFirstMessage) {
+                    String title = generateTitle(userMessage, assistantContent);
+                    conversationMapper.update(finalConversationId, title);
+                }
 
                 String doneData = objectMapper.writeValueAsString(Map.of(
                         "conversationId", finalConversationId,
-                        "status", "done"
+                        "status", "done",
+                        "usage", Map.of(
+                                "inputTokens", inputTokens != null ? inputTokens : 0,
+                                "outputTokens", outputTokens != null ? outputTokens : 0,
+                                "totalTokens", totalTokens
+                        )
                 ));
                 emitter.send(SseEmitter.event().name("done").data(doneData));
                 emitter.complete();
@@ -139,6 +222,21 @@ public class AiChatServiceImpl implements AiChatService {
             }
         });
 
+        tokenStream.start();
         return emitter;
+    }
+
+    private String generateTitle(String userMessage, String aiResponse) {
+        String prompt = String.format(
+                "根据以下对话内容，生成一个简短的会话标题（不超过15个字），只返回标题，不要其他内容：\n用户：%s\nAI：%s",
+                userMessage,
+                aiResponse.length() > 200 ? aiResponse.substring(0, 200) : aiResponse
+        );
+        try {
+            String title = chatModel.chat(prompt);
+            return title != null ? title.trim().replace("\"", "") : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

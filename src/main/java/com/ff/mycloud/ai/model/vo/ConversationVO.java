@@ -1,8 +1,5 @@
 package com.ff.mycloud.ai.model.vo;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -17,6 +14,8 @@ public class ConversationVO {
     private String model;
 
     private Long messageCount;
+
+    private Long totalTokens;
 
     private LocalDateTime createTime;
 

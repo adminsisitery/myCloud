@@ -4,9 +4,12 @@ import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.constant.ESConstants;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.OperationLog;
+import com.ff.mycloud.model.entity.PgSender;
+import dev.langchain4j.data.segment.TextSegment;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -84,5 +87,24 @@ public class RabbitMqServiceImpl implements RabbitMqService {
         operationLog.setMsgId(UUID.randomUUID().toString());
         rabbitTemplate.convertAndSend(CommonConstants.LogMQ.EXCHANGE,
                 CommonConstants.LogMQ.KEY, operationLog);
+    }
+
+
+    /**
+     * 发送文件新增索引消息到PG同步交换机
+     *
+     * 使用INSERT_KEY路由键，消费者{@link com.ff.mycloud.mq.consumer.PGSyncConsumer}处理此消息。
+     *
+     * @param segments 文件文档对象，包含待索引的文件信息
+     * @param segments
+     */
+    @Override
+    public void sendInsertPG(PgSender pgs) {
+        rabbitTemplate.convertAndSend(CommonConstants.PG.TOPIC_EXCHANGE,CommonConstants.PG.INSERT_KEY, pgs);
+    }
+
+    @Override
+    public void sendDeletePG(PgSender pgs) {
+        rabbitTemplate.convertAndSend(CommonConstants.PG.TOPIC_EXCHANGE, CommonConstants.PG.DELETE_KEY, pgs);
     }
 }
