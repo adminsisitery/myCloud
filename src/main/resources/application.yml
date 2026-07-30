@@ -127,13 +127,24 @@ File:
 
 # AI 配置
 ai:
-  api-key: ${AI_API_KEY:sk-ws-H.EIRMHMY.u3Nl.MEQCIAijQTHX_JIKBUnBOWO_124wENDcahl9BDn8dyJl-5KlAiASYDt8Frbcoszg__2PsNsC9JL1ZZwxejWbpYYO5Ud_Og}
-  base-url: https://api.deepseek.com
-  model: deepseek-chat
+  default-model: deepseek-chat
+
+  models:
+    - name: deepseek-chat
+      base-url: https://api.deepseek.com
+      api-key: sk-580f9fb8e7e24922b85dd422c17133e7
+      model: deepseek-chat
+      default: true
+
+    - name: qwen-Flash
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: sk-ws-H.EIEXMPD.HfMB.MEYCIQCCQkwQWB2RwtoV6KWsqW7Lilqb5yX0yLi_ODhmF7BFdQIhAKTls9ikPHHh04lFiR66VvLI1yT6JJ3_aZY5MafGQlXU
+      model: qwen-flash
+
+  tavily-api-key: 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
   # 通义 Embedding（独立于 chat）
   embedding-base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
   embedding-api-key: sk-ws-H.EIRMHMY.u3Nl.MEQCIAijQTHX_JIKBUnBOWO_124wENDcahl9BDn8dyJl-5KlAiASYDt8Frbcoszg__2PsNsC9JL1ZZwxejWbpYYO5Ud_Og
   embedding-model: text-embedding-v4
   embedding-dimensions: 1536
   timeout: 120s
-  tavily-api-key:

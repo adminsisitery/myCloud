@@ -9,4 +9,7 @@ public class ChatRequest {
 
     @NotBlank(message = "消息不能为空")
     String message;
+
+    /** 指定模型名，为空则用默认模型 */
+    String model;
 }

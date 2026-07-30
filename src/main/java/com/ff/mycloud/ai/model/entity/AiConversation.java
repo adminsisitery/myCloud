@@ -50,4 +50,8 @@ public class AiConversation {
     /** 会话最后活跃时间 */
     @TableField("update_time")
     private LocalDateTime updateTime;
+
+    /** 完整对话记忆 JSON（含工具调用，供 LC4j ChatMemoryStore 使用） */
+    @TableField("memory_state")
+    private String memoryState;
 }

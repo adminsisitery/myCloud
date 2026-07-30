@@ -10,11 +10,14 @@ import com.ff.mycloud.ai.model.entity.AiMessage;
 import com.ff.mycloud.ai.service.AiChatService;
 import com.ff.mycloud.ai.service.ChatAssistant;
 import com.ff.mycloud.ai.tool.CloudDriveTools;
+import com.ff.mycloud.ai.config.ModelRegistry;
+import com.ff.mycloud.ai.tool.WebSearchTool;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.handler.FileSearchHandler;
 import com.ff.mycloud.repositorys.FileRecentAccess;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.UserCenterMapperService;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -25,11 +28,13 @@ import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.web.search.WebSearchEngine;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -41,8 +46,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper aiMessageMapper;
     private final ObjectMapper objectMapper;
-    private final OpenAiChatModel chatModel;
-    private final OpenAiStreamingChatModel streamingModel;
+    private final ModelRegistry modelRegistry;
     private final FileInfoMapperService fileInfoService;
     private final FileSearchHandler fileSearchHandler;
     private final UserCenterMapperService userCenterService;
@@ -50,24 +54,25 @@ public class AiChatServiceImpl implements AiChatService {
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore embeddingStore;
     private final DbChatMemoryStore chatMemoryStore;
+    private final WebSearchEngine webSearchEngine;
 
     public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
                              ObjectMapper objectMapper,
-                             OpenAiChatModel chatModel,
-                             OpenAiStreamingChatModel streamingModel,
+                             ModelRegistry modelRegistry,
                              FileInfoMapperService fileInfoService,
                              FileSearchHandler fileSearchHandler,
                              UserCenterMapperService userCenterService,
                              FileRecentAccess fileRecentAccess,
                              EmbeddingModel embeddingModel,
                              EmbeddingStore embeddingStore,
-                             DbChatMemoryStore chatMemoryStore) {
+                             DbChatMemoryStore chatMemoryStore,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false)
+                             WebSearchEngine webSearchEngine) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.objectMapper = objectMapper;
-        this.chatModel = chatModel;
-        this.streamingModel = streamingModel;
+        this.modelRegistry = modelRegistry;
         this.fileInfoService = fileInfoService;
         this.fileSearchHandler = fileSearchHandler;
         this.userCenterService = userCenterService;
@@ -75,6 +80,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.embeddingModel = embeddingModel;
         this.embeddingStore = embeddingStore;
         this.chatMemoryStore = chatMemoryStore;
+        this.webSearchEngine = webSearchEngine;
     }
 
     @Override
@@ -82,6 +88,13 @@ public class AiChatServiceImpl implements AiChatService {
         Long userId = UserContext.getCurrentUserId();
         String userMessage = request.getMessage();
         Long conversationId = request.getConversationId();
+
+        // ===== 模型选择 =====
+        String modelName = request.getModel() != null
+                ? request.getModel()
+                : modelRegistry.getDefaultModelName();
+        OpenAiStreamingChatModel streamingModel = modelRegistry.getStreamingModel(modelName);
+        OpenAiChatModel chatModel = modelRegistry.getChatModel(modelName);
 
         // ===== 会话校验/创建 =====
         final AiConversation conv;
@@ -91,7 +104,7 @@ public class AiChatServiceImpl implements AiChatService {
             newConv.setTitle(userMessage.length() > 50
                     ? userMessage.substring(0, 50) + "..."
                     : userMessage);
-            newConv.setModel("deepseek-chat");
+            newConv.setModel(modelName);
             newConv.setCount(0L);
             conversationMapper.insert(newConv);
             conversationId = newConv.getId();
@@ -126,12 +139,19 @@ public class AiChatServiceImpl implements AiChatService {
                 .build();
 
         // ===== 每次请求新建 Tool + AiServices，userId 写死在实例里，绝对隔离 =====
+        List<Object> tools = new ArrayList<>();
+        tools.add(new CloudDriveTools(fileInfoService, fileSearchHandler, userCenterService, fileRecentAccess, userId));
+        if (webSearchEngine != null) {
+            tools.add(new WebSearchTool(webSearchEngine));
+        }
+
         ChatAssistant chatAssistant = AiServices.builder(ChatAssistant.class)
                 .streamingChatModel(streamingModel)
                 .chatModel(chatModel)
                 .contentRetriever(retriever)
                 .chatMemory(chatMemory)
-                .tools(new CloudDriveTools(fileInfoService, fileSearchHandler, userCenterService, fileRecentAccess, userId))
+                .maxSequentialToolsInvocations(5)
+                .tools(tools)
                 .build();
 
         // ===== SseEmitter =====
@@ -140,7 +160,13 @@ public class AiChatServiceImpl implements AiChatService {
         emitter.onError(ex -> System.out.println("SSE异常: " + ex.getMessage()));
         emitter.onTimeout(() -> System.out.println("SSE超时"));
 
+        // ===== 先添加干净的 UserMessage，这样 RAG 增强版会被 updateMessages 去重 =====
+        chatMemory.add(new UserMessage(userMessage));
+
         StringBuilder fullResponse = new StringBuilder();
+
+        // Token 用量 — lambda 内赋值，start() 返回后写入 DB
+        final TokenUsage[] tokenHolder = new TokenUsage[1];
 
         TokenStream tokenStream = chatAssistant.chat(userMessage);
 
@@ -156,25 +182,8 @@ public class AiChatServiceImpl implements AiChatService {
         tokenStream.onCompleteResponse(response -> {
             try {
                 String assistantContent = fullResponse.toString();
-
-                // ---------- Token 用量 ----------
                 TokenUsage usage = response.tokenUsage();
-                Integer inputTokens = usage != null ? usage.inputTokenCount() : null;
-                Integer outputTokens = usage != null ? usage.outputTokenCount() : null;
-
-                AiMessage userMsg = new AiMessage();
-                userMsg.setConversationId(finalConversationId);
-                userMsg.setRole("USER");
-                userMsg.setContent(userMessage);
-                aiMessageMapper.insert(userMsg);
-
-                AiMessage assistantMsg = new AiMessage();
-                assistantMsg.setConversationId(finalConversationId);
-                assistantMsg.setRole("ASSISTANT");
-                assistantMsg.setContent(assistantContent);
-                assistantMsg.setInputTokens(inputTokens);
-                assistantMsg.setOutputTokens(outputTokens);
-                aiMessageMapper.insert(assistantMsg);
+                tokenHolder[0] = usage;
 
                 // 更新会话：计数 + token 累计
                 AiConversation updateConv = new AiConversation();
@@ -192,12 +201,15 @@ public class AiChatServiceImpl implements AiChatService {
                     conversationMapper.update(finalConversationId, title);
                 }
 
+                int in = usage != null && usage.inputTokenCount() != null ? usage.inputTokenCount() : 0;
+                int out = usage != null && usage.outputTokenCount() != null ? usage.outputTokenCount() : 0;
                 String doneData = objectMapper.writeValueAsString(Map.of(
                         "conversationId", finalConversationId,
                         "status", "done",
+                        "model", modelName,
                         "usage", Map.of(
-                                "inputTokens", inputTokens != null ? inputTokens : 0,
-                                "outputTokens", outputTokens != null ? outputTokens : 0,
+                                "inputTokens", in,
+                                "outputTokens", out,
                                 "totalTokens", totalTokens
                         )
                 ));
@@ -223,6 +235,20 @@ public class AiChatServiceImpl implements AiChatService {
         });
 
         tokenStream.start();
+
+        // 消息已由 ChatMemoryStore.updateMessages() 持久化，补写 token 用量
+        TokenUsage usage = tokenHolder[0];
+        if (usage != null) {
+            Integer in = usage.inputTokenCount();
+            Integer out = usage.outputTokenCount();
+            if (in != null || out != null) {
+                Long lastId = aiMessageMapper.findLastAssistantId(finalConversationId);
+                if (lastId != null) {
+                    aiMessageMapper.updateTokens(lastId, in, out);
+                }
+            }
+        }
+
         return emitter;
     }
 
@@ -233,7 +259,7 @@ public class AiChatServiceImpl implements AiChatService {
                 aiResponse.length() > 200 ? aiResponse.substring(0, 200) : aiResponse
         );
         try {
-            String title = chatModel.chat(prompt);
+            String title = modelRegistry.getChatModel(null).chat(prompt);
             return title != null ? title.trim().replace("\"", "") : null;
         } catch (Exception e) {
             return null;

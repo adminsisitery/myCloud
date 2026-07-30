@@ -14,4 +14,12 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
 
     void deleteByCId(@Param("CId") Long conversationId);
 
+    /** 查最新一条 ASSISTANT 消息的 id */
+    Long findLastAssistantId(@Param("conversationId") Long conversationId);
+
+    /** 更新某条消息的 token 用量 */
+    void updateTokens(@Param("id") Long id,
+                      @Param("inputTokens") Integer inputTokens,
+                      @Param("outputTokens") Integer outputTokens);
+
 }

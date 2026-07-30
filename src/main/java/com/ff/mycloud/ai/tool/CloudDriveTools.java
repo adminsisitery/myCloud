@@ -11,20 +11,28 @@ import dev.langchain4j.agent.tool.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class CloudDriveTools {
 
     private static final Logger log = LoggerFactory.getLogger(CloudDriveTools.class);
     private static final int RECENT_LIMIT = 10;
+    private static final int MAX_CALLS_PER_TOOL = 3;
 
     private final FileInfoMapperService fileInfoService;
     private final FileSearchHandler fileSearchHandler;
     private final UserCenterMapperService userCenterService;
     private final FileRecentAccess fileRecentAccess;
     private final Long userId;
+
+    /** 每个工具方法的调用计数，防止 DeepSeek 无限循环调用 */
+    private final Map<String, AtomicInteger> callCount = new ConcurrentHashMap<>();
 
     public CloudDriveTools(FileInfoMapperService fileInfoService,
                            FileSearchHandler fileSearchHandler,
@@ -38,15 +46,27 @@ public class CloudDriveTools {
         this.userId = userId;
     }
 
+    /** 检查调用次数，超过限制返回提示 */
+    private boolean checkLimit(String toolName) {
+        int count = callCount.computeIfAbsent(toolName, k -> new AtomicInteger()).incrementAndGet();
+        if (count > MAX_CALLS_PER_TOOL) {
+            log.warn("[Tool] {} 调用次数已达上限({})，拒绝执行", toolName, MAX_CALLS_PER_TOOL);
+            return false;
+        }
+        return true;
+    }
+
     // ==================== 目录浏览 ====================
 
     @Tool("查看当前用户网盘根目录下所有文件和文件夹")
     public String listAllFiles() {
+        if (!checkLimit("listAllFiles")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         return listDirectory(0L);
     }
 
     @Tool("查看指定文件夹下的文件和子文件夹，parentId 为文件夹ID")
     public String listDirectory(Long parentId) {
+        if (!checkLimit("listDirectory")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] listDirectory userId={}, parentId={}", userId, parentId);
 
         List<FileInfo> files = fileInfoService.findByParentIdAndUserId(userId, parentId);
@@ -104,6 +124,7 @@ public class CloudDriveTools {
 
     @Tool("按照文件名模糊搜索文件")
     public String findFile(String keyWord) {
+        if (!checkLimit("findFile")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] findFile userId={}, keyWord={}", userId, keyWord);
 
         List<FileListVO> files = fileSearchHandler.searchFiles(keyWord, userId);
@@ -132,6 +153,7 @@ public class CloudDriveTools {
 
     @Tool("查看当前用户的网盘存储空间使用情况")
     public String getStorageInfo() {
+        if (!checkLimit("getStorageInfo")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] getStorageInfo userId={}", userId);
 
         UserCenter uc = userCenterService.getByUserId(userId);
@@ -155,6 +177,7 @@ public class CloudDriveTools {
 
     @Tool("查看当前用户收藏的文件列表")
     public String listStarredFiles() {
+        if (!checkLimit("listStarredFiles")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] listStarredFiles userId={}", userId);
 
         List<FileInfo> starred = fileInfoService.findStarredFiles(userId);
@@ -183,6 +206,7 @@ public class CloudDriveTools {
 
     @Tool("查看当前用户最近访问的文件列表")
     public String getRecentFiles() {
+        if (!checkLimit("getRecentFiles")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] getRecentFiles userId={}", userId);
 
         List<FileInfo> recent = fileRecentAccess.getRecentFiles(userId, RECENT_LIMIT);
@@ -211,6 +235,7 @@ public class CloudDriveTools {
 
     @Tool("查看当前用户回收站中的文件列表")
     public String getTrashList() {
+        if (!checkLimit("getTrashList")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] getTrashList userId={}", userId);
 
         List<FileInfo> trash = fileInfoService.getTrashFile(userId);
@@ -234,6 +259,14 @@ public class CloudDriveTools {
 
         return sb.toString();
     }
+
+
+    // ==================== 获取当前时间 ====================
+    @Tool("获取当前时间")
+    public String getNowDate(){
+        return LocalDateTime.now().toString();
+    }
+
 
     // ==================== 工具方法 ====================
 

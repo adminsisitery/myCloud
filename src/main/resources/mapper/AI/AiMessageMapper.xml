@@ -12,4 +12,16 @@
         DELETE FROM t_ai_message WHERE conversation_id = #{CId}
     </delete>
 
+    <select id="findLastAssistantId" resultType="java.lang.Long">
+        SELECT id FROM t_ai_message
+        WHERE conversation_id = #{conversationId} AND role = 'ASSISTANT'
+        ORDER BY create_time DESC LIMIT 1
+    </select>
+
+    <update id="updateTokens">
+        UPDATE t_ai_message
+        SET input_tokens = #{inputTokens}, output_tokens = #{outputTokens}
+        WHERE id = #{id}
+    </update>
+
 </mapper>

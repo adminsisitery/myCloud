@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
+import org.springframework.boot.actuate.health.HttpCodeStatusMapper;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -59,7 +61,7 @@ class FileServiceImplTest {
                 fileMapper, fileInfoMapperService,
                 userContext, userMapperServiceImpl,
                 upLoadProgressService, rabbitMqService,
-                fileObjectMapper, null, fileRecentAccess,documentSplitter
+                fileObjectMapper, (HttpCodeStatusMapper) null, fileRecentAccess, (TransactionTemplate) documentSplitter
         );
         userContextMock = mockStatic(UserContext.class);
         userContextMock.when(UserContext::getCurrentUserId).thenReturn(USER_ID);

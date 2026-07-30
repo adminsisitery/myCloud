@@ -11,6 +11,8 @@ import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiTokenCountEstimator;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
+import dev.langchain4j.web.search.WebSearchEngine;
+import dev.langchain4j.web.search.tavily.TavilyWebSearchEngine;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,25 +25,8 @@ public class AIConfig {
         this.properties = properties;
     }
 
-    @Bean
-    OpenAiChatModel openAiChatModel() {
-        return OpenAiChatModel.builder()
-                .apiKey(properties.getApiKey())
-                .baseUrl(properties.getBaseUrl())
-                .modelName(properties.getModel())
-                .timeout(properties.getTimeout())
-                .build();
-    }
-
-    @Bean
-    OpenAiStreamingChatModel openAiStreamingChatModel() {
-        return OpenAiStreamingChatModel.builder()
-                .apiKey(properties.getApiKey())
-                .baseUrl(properties.getBaseUrl())
-                .modelName(properties.getModel())
-                .timeout(properties.getTimeout())
-                .build();
-    }
+    // ChatModel / StreamingChatModel 由 ModelRegistry 统一管理
+    // 不再单独定义 Bean，通过 modelRegistry.getChatModel(name) / getStreamingModel(name) 获取
 
     @Bean
     EmbeddingModel embeddingModel() {
@@ -85,5 +70,14 @@ public class AIConfig {
     @Bean
     DocumentSplitter documentSplitter(TokenCountEstimator tokenCountEstimator) {
         return DocumentSplitters.recursive(400, 80, tokenCountEstimator);
+    }
+
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            name = "ai.tavily-api-key", matchIfMissing = false)
+    WebSearchEngine webSearchEngine() {
+        return TavilyWebSearchEngine.builder()
+                .apiKey(properties.getTavilyApiKey())
+                .build();
     }
 }
