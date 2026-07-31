@@ -63,6 +63,7 @@ public class ModelRegistry {
                 .baseUrl(cfg.getBaseUrl())
                 .modelName(cfg.getModel() != null ? cfg.getModel() : cfg.getName())
                 .timeout(Duration.ofSeconds(120))
+                .strictTools(true)
                 .build();
 
         chatModels.put(cfg.getName(), chatModel);

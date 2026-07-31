@@ -15,6 +15,7 @@ import com.ff.mycloud.ai.tool.WebSearchTool;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.handler.FileSearchHandler;
 import com.ff.mycloud.repositorys.FileRecentAccess;
+import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.UserCenterMapperService;
 import dev.langchain4j.data.message.UserMessage;
@@ -51,6 +52,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final FileSearchHandler fileSearchHandler;
     private final UserCenterMapperService userCenterService;
     private final FileRecentAccess fileRecentAccess;
+    private final FileMapper fileMapper;
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore embeddingStore;
     private final DbChatMemoryStore chatMemoryStore;
@@ -64,6 +66,7 @@ public class AiChatServiceImpl implements AiChatService {
                              FileSearchHandler fileSearchHandler,
                              UserCenterMapperService userCenterService,
                              FileRecentAccess fileRecentAccess,
+                             FileMapper fileMapper,
                              EmbeddingModel embeddingModel,
                              EmbeddingStore embeddingStore,
                              DbChatMemoryStore chatMemoryStore,
@@ -77,6 +80,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.fileSearchHandler = fileSearchHandler;
         this.userCenterService = userCenterService;
         this.fileRecentAccess = fileRecentAccess;
+        this.fileMapper = fileMapper;
         this.embeddingModel = embeddingModel;
         this.embeddingStore = embeddingStore;
         this.chatMemoryStore = chatMemoryStore;
@@ -140,7 +144,8 @@ public class AiChatServiceImpl implements AiChatService {
 
         // ===== 每次请求新建 Tool + AiServices，userId 写死在实例里，绝对隔离 =====
         List<Object> tools = new ArrayList<>();
-        tools.add(new CloudDriveTools(fileInfoService, fileSearchHandler, userCenterService, fileRecentAccess, userId));
+        tools.add(new CloudDriveTools(fileInfoService, fileSearchHandler,
+                userCenterService, fileRecentAccess, fileMapper, userId));
         if (webSearchEngine != null) {
             tools.add(new WebSearchTool(webSearchEngine));
         }

@@ -68,13 +68,13 @@ public class FolderServiceImpl implements FolderService {
     @Override
     public Result<String> createFolder(Long parentId, String folderName) {
 
-        folderName=folderName.trim();
+        // 查看是否为null
+        if (folderName == null || folderName.trim().isEmpty()) {
+            return Result.error(500, "文件夹名不能为空");
+        }
+        folderName = folderName.trim();
         //获得当前操作用户
         Long currentUserId = UserContext.getCurrentUserId();
-        //查看是否为null
-        if (folderName==null||folderName.trim().isEmpty()) {
-            return Result.error(500,"文件夹名不能为空");
-        }
         //限制文件夹名长度
         if(folderName.length() > 30){
             return Result.error(500,"名称过长");

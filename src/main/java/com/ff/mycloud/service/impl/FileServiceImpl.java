@@ -255,14 +255,16 @@ public class FileServiceImpl implements FileService {
             suffix = "";
         }
 
-        String localFilePath;
+        // 防重名：同级目录存在同名文件时自动加数字后缀
+        String[] resolved = resolveUploadNameConflict(fileNameWithoutSuffix, suffix, parentId, currentUserId);
+        final String finalBaseName = resolved[0];
+        final String finalSuffix = resolved[1];
+        final String resolvedFilename = finalSuffix.isEmpty() ? finalBaseName : finalBaseName + "." + finalSuffix;
+
+        final String localFilePath;
         if (parentId != null) {
             FileInfo byId = fileInfoMapperService.getById(parentId);
-            if (byId != null) {
-                localFilePath = byId.getLocalFilePath() + originalFilename;
-            } else {
-                localFilePath = "";
-            }
+            localFilePath = byId != null ? byId.getLocalFilePath() + resolvedFilename : "";
         } else {
             localFilePath = "";
         }
@@ -270,7 +272,7 @@ public class FileServiceImpl implements FileService {
         try {
             // DB 操作在事务中执行，失败自动回滚
             FileInfo fileInfo = transactionTemplate.execute(status -> {
-                FileInfo fi = fileMapper.toFileInfoFromPath(fileNameWithoutSuffix, path, size, currentUser.getId(), parentId, fileHashSHA256, suffix, fileType, originalFilename, localFilePath);
+                FileInfo fi = fileMapper.toFileInfoFromPath(finalBaseName, path, size, currentUser.getId(), parentId, fileHashSHA256, finalSuffix, fileType, resolvedFilename, localFilePath);
                 fi.setCategoryId(categoryFiles(fi));
                 FileObject fo = fileMapper.toFileObject(fi, FileObjectStatus.AVAILABLE);
                 fileInfoMapperService.save(fi);
@@ -472,9 +474,10 @@ public class FileServiceImpl implements FileService {
 
             List<FileInfo> children = fileInfoMapperService.getSubTree(oldPrefixNormalized, currentUserId);
 
-            // 先复制根文件夹，拿到新 ID
+            // 先复制根文件夹，拿到新 ID（防重名）
+            String copyName = resolveCopyName(source.getFilename(), null, source.getParentId(), currentUserId, true);
             FileInfo newRoot = cloneFileInfo(source);
-            newRoot.setFilename(source.getFilename() + "(复制)");
+            newRoot.setFilename(copyName);
             String newRootPath = source.getLocalFilePath().replaceFirst(
                     java.util.regex.Pattern.quote(source.getFilename()) + "/?$",
                     newRoot.getFilename() + "/");
@@ -504,8 +507,9 @@ public class FileServiceImpl implements FileService {
             log.info("文件夹复制完成：fileId={}, 共{}个节点", fileId, children.size());
         } else {
             // ========== 单文件：直接复制 ==========
+            String copyName = resolveCopyName(source.getFilename(), source.getFileSuffix(), source.getParentId(), currentUserId, false);
             FileInfo copyFile = cloneFileInfo(source);
-            copyFile.setFilename(source.getFilename() + "(复制)");
+            copyFile.setFilename(copyName);
             fileInfoMapperService.save(copyFile);
 
             // 秒传：共享同一个 OSS 文件，创建 FileObject 引用
@@ -830,9 +834,17 @@ public class FileServiceImpl implements FileService {
      */
 //    这个原理就是不用上传文件 在数据库生成一个记录就行 不管用户文甲明是不是一样 只要路径对应就行
     private FileInfo handleFastUpload(String filename, long fileSize, FileInfo existingFile, String sha256Hash, Long parentId, String taskId, User currentUser) {
+        // 防重名：提取后缀并检查同名冲突
+        int dotIdx = filename.lastIndexOf(".");
+        String baseName = dotIdx > 0 ? filename.substring(0, dotIdx) : filename;
+        String suffix = dotIdx > 0 ? filename.substring(dotIdx + 1) : "";
+        String[] resolved = resolveUploadNameConflict(baseName, suffix, parentId, currentUser.getId());
+        String finalBaseName = resolved[0];
+        String finalSuffix = resolved[1];
+        String resolvedFilename = finalSuffix.isEmpty() ? finalBaseName : finalBaseName + "." + finalSuffix;
+
         // 使用MapStruct创建一个新的文件记录
-        String filenames = filename.substring(0, filename.lastIndexOf("."));
-        FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(filename,filenames, existingFile, currentUser.getId(), parentId, sha256Hash);
+        FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(resolvedFilename, finalBaseName, existingFile, currentUser.getId(), parentId, sha256Hash);
         newFileInfo.setCategoryId(categoryFiles(newFileInfo));
 
 //         如果有任务ID，则进行进度跟踪
@@ -847,12 +859,12 @@ public class FileServiceImpl implements FileService {
         //异步同步ES
         FileDocument fileDocument = new FileDocument();
         fileDocument.setId(newFileInfo.getId());
-        fileDocument.setFileName(newFileInfo.getFilename()+ "." + newFileInfo.getFileSuffix());
+        fileDocument.setFileName(newFileInfo.getFilename() + "." + newFileInfo.getFileSuffix());
         fileDocument.setFileType(newFileInfo.getFileType());
         fileDocument.setUserId(currentUser.getId());
         rabbitMqService.sendInsertMessage(fileDocument);
         sendOpLog(OperationLog.OP_UPLOAD, newFileInfo.getId(),
-                fileDocument.getFileName(), newFileInfo.getFileSize(), "秒传");
+                resolvedFilename, newFileInfo.getFileSize(), "秒传");
         return newFileInfo;
     }
 
@@ -1004,6 +1016,75 @@ public class FileServiceImpl implements FileService {
         log.setClientIp(IpUtil.getClientIp());
         log.setCreateTime(LocalDateTime.now());
         rabbitMqService.sendLogMessage(log);
+    }
+
+    /**
+     * 上传文件同名冲突解决：同级目录存在同名文件时自动加数字后缀。
+     * <p>规则：test.txt → test(1).txt → test(2).txt → ...</p>
+     *
+     * @param baseName      文件名（不含后缀）
+     * @param suffix        文件后缀（不含点）
+     * @param parentId      父目录ID
+     * @param currentUserId 当前用户ID
+     * @return [resolvedBaseName, resolvedSuffix]
+     */
+    private String[] resolveUploadNameConflict(String baseName, String suffix, Long parentId, Long currentUserId) {
+        List<FileInfo> siblings = fileInfoMapperService.findByParentIdAndUserId(currentUserId, parentId);
+        String resolvedBase = baseName;
+        String resolvedSuffix = suffix;
+
+        // 检查是否有同名冲突
+        if (hasNameConflict(resolvedBase, resolvedSuffix, siblings, null)) {
+            int counter = 1;
+            while (hasNameConflict(resolvedBase + "(" + counter + ")", resolvedSuffix, siblings, null) && counter < 1000) {
+                counter++;
+            }
+            resolvedBase = baseName + "(" + counter + ")";
+            log.info("上传文件同名冲突，自动重命名：{}.{} -> {}.{}", baseName, suffix, resolvedBase, resolvedSuffix);
+        }
+
+        return new String[]{resolvedBase, resolvedSuffix};
+    }
+
+    /**
+     * 复制文件同名冲突解决：同级目录存在"xxx(复制)"时自动递增。
+     */
+    private String resolveCopyName(String baseName, String suffix, Long parentId, Long currentUserId, boolean isFolder) {
+        List<FileInfo> siblings = fileInfoMapperService.findByParentIdAndUserId(currentUserId, parentId);
+        String candidate = baseName + "(复制)";
+        if (!hasCopyNameConflict(candidate, suffix, siblings, null, isFolder)) {
+            return candidate;
+        }
+        for (int i = 2; i <= 99; i++) {
+            candidate = baseName + "(复制" + i + ")";
+            if (!hasCopyNameConflict(candidate, suffix, siblings, null, isFolder)) {
+                return candidate;
+            }
+        }
+        return baseName + "(复制" + System.currentTimeMillis() % 100000 + ")";
+    }
+
+    private boolean hasCopyNameConflict(String name, String suffix, List<FileInfo> siblings, Long excludeId, boolean isFolder) {
+        if (siblings == null) return false;
+        for (FileInfo f : siblings) {
+            if (excludeId != null && f.getId().equals(excludeId)) continue;
+            if (!java.util.Objects.equals(f.getIsFolder(), isFolder)) continue;
+            if (name.equalsIgnoreCase(f.getFilename())) return true;
+        }
+        return false;
+    }
+
+    private boolean hasNameConflict(String name, String suffix, List<FileInfo> siblings, Long excludeId) {
+        if (siblings == null) return false;
+        String fullName = suffix != null && !suffix.isEmpty() ? name + "." + suffix : name;
+        for (FileInfo f : siblings) {
+            if (excludeId != null && f.getId().equals(excludeId)) continue;
+            String fName = f.getFileSuffix() != null && !f.getFileSuffix().isEmpty()
+                    ? f.getFilename() + "." + f.getFileSuffix()
+                    : f.getFilename();
+            if (fullName.equalsIgnoreCase(fName)) return true;
+        }
+        return false;
     }
 
 }
