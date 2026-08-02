@@ -37,6 +37,28 @@ public class AIProperties {
     /** Tavily 联网搜索 API Key */
     private String tavilyApiKey;
 
+    /** Prompt 模板配置 */
+    private Prompts prompts = new Prompts();
+
+    @Data
+    public static class Prompts {
+        /** 普通聊天模式 System Prompt */
+        private String chat;
+        /** Agent 模式 System Prompt */
+        private String agent;
+        /** Agent 规划阶段 Prompt（需包含 %s 占位符，用于插入用户请求） */
+        private String agentPlanning;
+
+        /** 转为 Map，方便 PromptService 按名取用 */
+        public java.util.Map<String, String> toMap() {
+            java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
+            if (chat != null) map.put("chat", chat);
+            if (agent != null) map.put("agent", agent);
+            if (agentPlanning != null) map.put("agent-planning", agentPlanning);
+            return map;
+        }
+    }
+
     @Data
     public static class ModelConfig {
         /** 模型标识名 */

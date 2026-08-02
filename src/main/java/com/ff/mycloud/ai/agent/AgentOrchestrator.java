@@ -3,11 +3,14 @@ package com.ff.mycloud.ai.agent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ai.config.ModelRegistry;
+import com.ff.mycloud.ai.config.PromptService;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
+import com.ff.mycloud.ai.mapper.AiUsageLogMapper;
 import com.ff.mycloud.ai.memory.DbChatMemoryStore;
 import com.ff.mycloud.ai.model.dto.ChatRequest;
 import com.ff.mycloud.ai.model.entity.AiConversation;
+import com.ff.mycloud.ai.model.entity.AiUsageLog;
 import com.ff.mycloud.ai.service.ChatAssistant;
 import com.ff.mycloud.ai.tool.CloudDriveTools;
 import com.ff.mycloud.ai.tool.WebSearchTool;
@@ -58,6 +61,7 @@ public class AgentOrchestrator {
 
     private final ObjectMapper objectMapper;
     private final ModelRegistry modelRegistry;
+    private final PromptService promptService;
     private final FileInfoMapperService fileInfoService;
     private final FileSearchHandler fileSearchHandler;
     private final UserCenterMapperService userCenterService;
@@ -65,6 +69,7 @@ public class AgentOrchestrator {
     private final FileMapper fileMapper;
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper aiMessageMapper;
+    private final AiUsageLogMapper aiUsageLogMapper;
     private final DbChatMemoryStore chatMemoryStore;
     private final EmbeddingStore embeddingStore;
     private final dev.langchain4j.model.embedding.EmbeddingModel embeddingModel;
@@ -72,6 +77,7 @@ public class AgentOrchestrator {
 
     public AgentOrchestrator(ObjectMapper objectMapper,
                              ModelRegistry modelRegistry,
+                             PromptService promptService,
                              FileInfoMapperService fileInfoService,
                              FileSearchHandler fileSearchHandler,
                              UserCenterMapperService userCenterService,
@@ -79,6 +85,7 @@ public class AgentOrchestrator {
                              FileMapper fileMapper,
                              AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
+                             AiUsageLogMapper aiUsageLogMapper,
                              DbChatMemoryStore chatMemoryStore,
                              EmbeddingStore embeddingStore,
                              dev.langchain4j.model.embedding.EmbeddingModel embeddingModel,
@@ -86,6 +93,7 @@ public class AgentOrchestrator {
                              WebSearchEngine webSearchEngine) {
         this.objectMapper = objectMapper;
         this.modelRegistry = modelRegistry;
+        this.promptService = promptService;
         this.fileInfoService = fileInfoService;
         this.fileSearchHandler = fileSearchHandler;
         this.userCenterService = userCenterService;
@@ -93,6 +101,7 @@ public class AgentOrchestrator {
         this.fileMapper = fileMapper;
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
+        this.aiUsageLogMapper = aiUsageLogMapper;
         this.chatMemoryStore = chatMemoryStore;
         this.embeddingStore = embeddingStore;
         this.embeddingModel = embeddingModel;
@@ -140,6 +149,8 @@ public class AgentOrchestrator {
 
         // ===== Phase 1: PLAN (async in a thread to not block) =====
         new Thread(() -> {
+            final long startTime = System.currentTimeMillis();
+            int totalToolCalls = 0;
             try {
                 // ---- 1a. 规划 ----
                 sendEvent(emitter, "agent_status",
@@ -252,6 +263,25 @@ public class AgentOrchestrator {
                     aiMessageMapper.updateTokens(lastId, inputTokens, outputTokens);
                 }
 
+                // ===== 写入 Token 用量明细日志 =====
+                try {
+                    AiUsageLog usageLog = AiUsageLog.builder()
+                            .userId(userId)
+                            .conversationId(finalConvId)
+                            .model(modelName)
+                            .scene("agent")
+                            .promptTokens(inputTokens)
+                            .completionTokens(outputTokens)
+                            .totalTokens((int) totalTokens)
+                            .toolCallCount(totalToolCalls)
+                            .latencyMs(System.currentTimeMillis() - startTime)
+                            .createdAt(LocalDateTime.now())
+                            .build();
+                    aiUsageLogMapper.insert(usageLog);
+                } catch (Exception logEx) {
+                    log.warn("Agent usage log insert failed: {}", logEx.getMessage());
+                }
+
                 // ---- done ----
                 String doneData = objectMapper.writeValueAsString(Map.of(
                         "conversationId", finalConvId,
@@ -321,32 +351,8 @@ public class AgentOrchestrator {
     }
 
     private String buildPlanningPrompt(String userMessage) {
-        return """
-                你是一个任务规划器。根据用户的请求，将其分解为具体的执行步骤。
-
-                【可用工具】
-                文件浏览: listAllFiles, listDirectory(parentId), findFile(keyWord)
-                文件操作: createFolder(parentId, folderName), renameFile(currentName, newName),
-                         deleteFile(fileName), moveFile(fileName, targetFolderName), copyFile(fileName)
-                收藏回收: starFile(fileName), unstarFile(fileName), listStarredFiles,
-                         getTrashList, restoreFile(fileName), cleanTrash
-                其他: getStorageInfo, getRecentFiles, getNowDate, webSearch(query)
-
-                【用户请求】
-                %s
-
-                【输出格式】严格输出以下 JSON（不要输出其他内容）:
-                {
-                  "goal": "用户目标的简洁概括",
-                  "steps": ["步骤1描述", "步骤2描述", ...]
-                }
-
-                【规则】
-                1. 每个步骤必须是自然语言，能被AI助手独立理解执行
-                2. 涉及文件操作要具体描述（文件名、位置等）
-                3. 步骤数 2-6 个，简单请求 1 个即可
-                4. 文件操作前先浏览确认
-                """.formatted(userMessage);
+        String template = promptService.getAgentPlanningPrompt();
+        return template.formatted(userMessage);
     }
 
     /** 从 LLM 响应中提取 JSON */
@@ -396,6 +402,7 @@ public class AgentOrchestrator {
         return AiServices.builder(ChatAssistant.class)
                 .streamingChatModel(streamingModel)
                 .chatModel(chatModel)
+                .systemMessageProvider(memoryId -> promptService.getAgentPrompt())
                 .contentRetriever(retriever)
                 .chatMemory(memory)
                 .maxSequentialToolsInvocations(5)
