@@ -2,6 +2,8 @@ package com.ff.mycloud.ai.agent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ff.mycloud.ES.FileSearchRepository;
+import com.ff.mycloud.ai.ContentRetrievers.ESAndPgContentRetriever;
 import com.ff.mycloud.ai.config.ModelRegistry;
 import com.ff.mycloud.ai.config.PromptService;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
@@ -26,6 +28,7 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
@@ -74,6 +77,7 @@ public class AgentOrchestrator {
     private final EmbeddingStore embeddingStore;
     private final dev.langchain4j.model.embedding.EmbeddingModel embeddingModel;
     private final WebSearchEngine webSearchEngine;
+    private final FileSearchRepository fileSearchRepository;
 
     public AgentOrchestrator(ObjectMapper objectMapper,
                              ModelRegistry modelRegistry,
@@ -90,7 +94,9 @@ public class AgentOrchestrator {
                              EmbeddingStore embeddingStore,
                              dev.langchain4j.model.embedding.EmbeddingModel embeddingModel,
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
-                             WebSearchEngine webSearchEngine) {
+                             WebSearchEngine webSearchEngine,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false)
+                             FileSearchRepository fileSearchRepository) {
         this.objectMapper = objectMapper;
         this.modelRegistry = modelRegistry;
         this.promptService = promptService;
@@ -106,6 +112,7 @@ public class AgentOrchestrator {
         this.embeddingStore = embeddingStore;
         this.embeddingModel = embeddingModel;
         this.webSearchEngine = webSearchEngine;
+        this.fileSearchRepository = fileSearchRepository;
     }
 
     /**
@@ -391,13 +398,23 @@ public class AgentOrchestrator {
         OpenAiStreamingChatModel streamingModel = modelRegistry.getStreamingModel(modelName);
         OpenAiChatModel chatModel = modelRegistry.getChatModel(modelName);
 
-        EmbeddingStoreContentRetriever retriever = EmbeddingStoreContentRetriever.builder()
-                .embeddingStore(embeddingStore)
-                .embeddingModel(embeddingModel)
-                .filter(metadataKey("userId").isEqualTo(String.valueOf(userId)))
-                .maxResults(3)
-                .minScore(0.6)
-                .build();
+        ContentRetriever retriever;
+        if (fileSearchRepository != null) {
+            retriever = new ESAndPgContentRetriever(
+                    embeddingStore, embeddingModel, fileSearchRepository,
+                    userId, 3, 0.6,
+                    metadataKey("userId").isEqualTo(String.valueOf(userId)),
+                    "agent"
+            );
+        } else {
+            retriever = EmbeddingStoreContentRetriever.builder()
+                    .embeddingStore(embeddingStore)
+                    .embeddingModel(embeddingModel)
+                    .filter(metadataKey("userId").isEqualTo(String.valueOf(userId)))
+                    .maxResults(3)
+                    .minScore(0.6)
+                    .build();
+        }
 
         return AiServices.builder(ChatAssistant.class)
                 .streamingChatModel(streamingModel)
