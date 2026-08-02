@@ -27,6 +27,9 @@ public class FileDocument {
     /** 文件名（不含后缀），用于模糊搜索 */
     private String fileName;
 
+    /** 文件的纯文本内容 */
+    private String content;
+
     /** 所属用户ID，用于搜索时隔离用户数据 */
     private Long userId;
 
