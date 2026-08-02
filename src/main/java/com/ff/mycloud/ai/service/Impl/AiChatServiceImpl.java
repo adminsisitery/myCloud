@@ -1,6 +1,8 @@
 package com.ff.mycloud.ai.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ff.mycloud.ES.FileSearchRepository;
+import com.ff.mycloud.ai.ContentRetrievers.ESAndPgContentRetriever;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
 import com.ff.mycloud.ai.mapper.AiUsageLogMapper;
@@ -30,6 +32,7 @@ import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.TokenStream;
@@ -65,6 +68,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final DbChatMemoryStore chatMemoryStore;
     private final WebSearchEngine webSearchEngine;
     private final AgentOrchestrator agentOrchestrator;
+    private final FileSearchRepository fileSearchRepository;
 
     public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
@@ -82,7 +86,9 @@ public class AiChatServiceImpl implements AiChatService {
                              DbChatMemoryStore chatMemoryStore,
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
                              WebSearchEngine webSearchEngine,
-                             AgentOrchestrator agentOrchestrator) {
+                             AgentOrchestrator agentOrchestrator,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false)
+                             FileSearchRepository fileSearchRepository) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.aiUsageLogMapper = aiUsageLogMapper;
@@ -99,6 +105,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.chatMemoryStore = chatMemoryStore;
         this.webSearchEngine = webSearchEngine;
         this.agentOrchestrator = agentOrchestrator;
+        this.fileSearchRepository = fileSearchRepository;
     }
 
     @Override
@@ -148,13 +155,24 @@ public class AiChatServiceImpl implements AiChatService {
                 .build();
 
         // ===== per-request ContentRetriever，userId 过滤，绝对隔离 =====
-        EmbeddingStoreContentRetriever retriever = EmbeddingStoreContentRetriever.builder()
-                .embeddingStore(embeddingStore)
-                .embeddingModel(embeddingModel)
-                .filter(metadataKey("userId").isEqualTo(String.valueOf(userId)))
-                .maxResults(5)
-                .minScore(0.6)
-                .build();
+        // ES 可用时走混合检索，否则降级为纯 PGVector
+        ContentRetriever retriever;
+        if (fileSearchRepository != null) {
+            retriever = new ESAndPgContentRetriever(
+                    embeddingStore, embeddingModel, fileSearchRepository,
+                    userId, 5, 0.6,
+                    metadataKey("userId").isEqualTo(String.valueOf(userId)),
+                    "chat"
+            );
+        } else {
+            retriever = EmbeddingStoreContentRetriever.builder()
+                    .embeddingStore(embeddingStore)
+                    .embeddingModel(embeddingModel)
+                    .filter(metadataKey("userId").isEqualTo(String.valueOf(userId)))
+                    .maxResults(5)
+                    .minScore(0.6)
+                    .build();
+        }
 
         // ===== 普通聊天：SimpleChatAssistant，仅搜索 + RAG，无文件操作工具 =====
         List<Object> chatTools = new ArrayList<>();
