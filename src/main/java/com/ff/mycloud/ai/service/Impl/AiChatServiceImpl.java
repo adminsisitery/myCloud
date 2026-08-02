@@ -3,11 +3,14 @@ package com.ff.mycloud.ai.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
+import com.ff.mycloud.ai.mapper.AiUsageLogMapper;
 import com.ff.mycloud.ai.agent.AgentOrchestrator;
+import com.ff.mycloud.ai.config.PromptService;
 import com.ff.mycloud.ai.memory.DbChatMemoryStore;
 import com.ff.mycloud.ai.model.dto.ChatRequest;
 import com.ff.mycloud.ai.model.entity.AiConversation;
 import com.ff.mycloud.ai.model.entity.AiMessage;
+import com.ff.mycloud.ai.model.entity.AiUsageLog;
 import com.ff.mycloud.ai.service.AiChatService;
 import com.ff.mycloud.ai.service.ChatAssistant;
 import com.ff.mycloud.ai.service.SimpleChatAssistant;
@@ -48,8 +51,10 @@ public class AiChatServiceImpl implements AiChatService {
 
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper aiMessageMapper;
+    private final AiUsageLogMapper aiUsageLogMapper;
     private final ObjectMapper objectMapper;
     private final ModelRegistry modelRegistry;
+    private final PromptService promptService;
     private final FileInfoMapperService fileInfoService;
     private final FileSearchHandler fileSearchHandler;
     private final UserCenterMapperService userCenterService;
@@ -63,8 +68,10 @@ public class AiChatServiceImpl implements AiChatService {
 
     public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
+                             AiUsageLogMapper aiUsageLogMapper,
                              ObjectMapper objectMapper,
                              ModelRegistry modelRegistry,
+                             PromptService promptService,
                              FileInfoMapperService fileInfoService,
                              FileSearchHandler fileSearchHandler,
                              UserCenterMapperService userCenterService,
@@ -78,8 +85,10 @@ public class AiChatServiceImpl implements AiChatService {
                              AgentOrchestrator agentOrchestrator) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
+        this.aiUsageLogMapper = aiUsageLogMapper;
         this.objectMapper = objectMapper;
         this.modelRegistry = modelRegistry;
+        this.promptService = promptService;
         this.fileInfoService = fileInfoService;
         this.fileSearchHandler = fileSearchHandler;
         this.userCenterService = userCenterService;
@@ -155,6 +164,7 @@ public class AiChatServiceImpl implements AiChatService {
         SimpleChatAssistant chatAssistant = AiServices.builder(SimpleChatAssistant.class)
                 .streamingChatModel(streamingModel)
                 .chatModel(chatModel)
+                .systemMessageProvider(memoryId -> promptService.getChatPrompt())
                 .contentRetriever(retriever)
                 .chatMemory(chatMemory)
                 .tools(chatTools)
@@ -165,6 +175,9 @@ public class AiChatServiceImpl implements AiChatService {
         emitter.onCompletion(() -> System.out.println("SSE连接正常关闭"));
         emitter.onError(ex -> System.out.println("SSE异常: " + ex.getMessage()));
         emitter.onTimeout(() -> System.out.println("SSE超时"));
+
+        // ===== 计时开始 =====
+        final long startTime = System.currentTimeMillis();
 
         // ===== 先添加干净的 UserMessage，这样 RAG 增强版会被 updateMessages 去重 =====
         chatMemory.add(new UserMessage(userMessage));
@@ -209,6 +222,26 @@ public class AiChatServiceImpl implements AiChatService {
 
                 int in = usage != null && usage.inputTokenCount() != null ? usage.inputTokenCount() : 0;
                 int out = usage != null && usage.outputTokenCount() != null ? usage.outputTokenCount() : 0;
+
+                // ===== 写入 Token 用量明细日志 =====
+                try {
+                    AiUsageLog usageLog = AiUsageLog.builder()
+                            .userId(userId)
+                            .conversationId(finalConversationId)
+                            .model(modelName)
+                            .scene("chat")
+                            .promptTokens(in)
+                            .completionTokens(out)
+                            .totalTokens((int) totalTokens)
+                            .latencyMs(System.currentTimeMillis() - startTime)
+                            .createdAt(LocalDateTime.now())
+                            .build();
+                    aiUsageLogMapper.insert(usageLog);
+                } catch (Exception logEx) {
+                    // 日志写入失败不影响主流程
+                    System.err.println("Token usage log insert failed: " + logEx.getMessage());
+                }
+
                 String doneData = objectMapper.writeValueAsString(Map.of(
                         "conversationId", finalConversationId,
                         "status", "done",
