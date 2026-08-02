@@ -34,7 +34,9 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
@@ -281,10 +283,10 @@ public class FileServiceImpl implements FileService {
             });
 
             if (fileInfo == null) return;
-
+            Document document = null;
             // 异步同步 PGVector（传原始文本，分片在消费者做）
             if (isDocumentType(fileInfo.getFileSuffix())) {
-                Document document = parseLocalFile(file);
+                document = parseLocalFile(file);
                 PgSender pgs = PgSender.builder()
                         .fileId(fileInfo.getId())
                         .userId(currentUserId)
@@ -296,6 +298,9 @@ public class FileServiceImpl implements FileService {
             // 异步同步 ES
             FileDocument fileDocument = new FileDocument();
             fileDocument.setId(fileInfo.getId());
+            if (document != null) {
+                fileDocument.setContent(document.text());
+            }
             fileDocument.setFileName(fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
             fileDocument.setFileType(fileInfo.getFileType());
             fileDocument.setUserId(currentUserId);
@@ -479,7 +484,7 @@ public class FileServiceImpl implements FileService {
             FileInfo newRoot = cloneFileInfo(source);
             newRoot.setFilename(copyName);
             String newRootPath = source.getLocalFilePath().replaceFirst(
-                    java.util.regex.Pattern.quote(source.getFilename()) + "/?$",
+                    Pattern.quote(source.getFilename()) + "/?$",
                     newRoot.getFilename() + "/");
             newRoot.setLocalFilePath(newRootPath);
             fileInfoMapperService.save(newRoot);
@@ -1068,7 +1073,7 @@ public class FileServiceImpl implements FileService {
         if (siblings == null) return false;
         for (FileInfo f : siblings) {
             if (excludeId != null && f.getId().equals(excludeId)) continue;
-            if (!java.util.Objects.equals(f.getIsFolder(), isFolder)) continue;
+            if (!Objects.equals(f.getIsFolder(), isFolder)) continue;
             if (name.equalsIgnoreCase(f.getFilename())) return true;
         }
         return false;

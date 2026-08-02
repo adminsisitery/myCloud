@@ -11,7 +11,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 文件搜索服务实现类
@@ -60,15 +62,17 @@ public class FileSearchServiceImpl implements FileSearchService {
     @Override
     public List<FileInfo> searchFile(String keyword) {
         // 在ES中按文件名关键词和用户ID模糊搜索
-        List<FileDocument> containing = fileSearchRepository.findByFileNameContainingAndUserId(keyword, UserContext.getCurrentUserId());
+        List<FileDocument> byFileNameContainingAndUserId = fileSearchRepository.findByFileNameContainingAndUserId(keyword, UserContext.getCurrentUserId());
+        List<FileDocument> byContentContainingAndUserId = fileSearchRepository.findByContentContainingAndUserId(keyword, UserContext.getCurrentUserId());
+        Set<Long> ids = new LinkedHashSet<>();
+        byFileNameContainingAndUserId.forEach(d -> {ids.add(d.getId());});
+        byContentContainingAndUserId.forEach(b -> {ids.add(b.getId());});
         //提取id
-        List<Long> ids = containing.stream().map(FileDocument::getId).toList();
-
         if (ids.isEmpty()){
             return List.of();
         }
 
-        List<FileInfo> inIdAndUserId = fileInfoMapperService.findInIdAndUserId(ids, UserContext.getCurrentUserId());
+        List<FileInfo> inIdAndUserId = fileInfoMapperService.findInIdAndUserId(new ArrayList<>(ids), UserContext.getCurrentUserId());
         for (FileInfo fileInfo : inIdAndUserId) {
             if (!fileInfo.getIsFolder()){
                 fileInfo.setFilename(fileInfo.getFilename()+"."+fileInfo.getFileSuffix());

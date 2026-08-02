@@ -1,6 +1,7 @@
 package com.ff.mycloud.ES;
 
 import com.ff.mycloud.model.entity.FileDocument;
+import org.apache.ibatis.annotations.Param;
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
 
 import java.util.List;
@@ -18,16 +19,17 @@ import java.util.List;
 public interface FileSearchRepository extends ElasticsearchRepository<FileDocument,Long> {
 
     /**
-     * 根据文件名关键词和用户ID模糊搜索文件
-     *
-     * Spring Data根据方法名自动生成查询：在指定用户的文件索引中，
-     * 对fileName字段执行包含匹配（Containing），实现模糊搜索。
-     *
-     * @param keyword 文件名关键词，支持模糊匹配
-     * @param userId  用户ID，用于数据隔离
-     * @return 匹配的文件文档列表，无结果时返回空列表
+     * 根据文件名关键词和用户ID模糊搜索
      */
     List<FileDocument> findByFileNameContainingAndUserId(
+            String keyword,
+            Long userId
+    );
+
+    /**
+     * 根据文件内容搜索
+     */
+    List<FileDocument> findByContentContainingAndUserId(
             String keyword,
             Long userId
     );
