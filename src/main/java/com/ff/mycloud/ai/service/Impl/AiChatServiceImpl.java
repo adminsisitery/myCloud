@@ -3,12 +3,14 @@ package com.ff.mycloud.ai.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
+import com.ff.mycloud.ai.agent.AgentOrchestrator;
 import com.ff.mycloud.ai.memory.DbChatMemoryStore;
 import com.ff.mycloud.ai.model.dto.ChatRequest;
 import com.ff.mycloud.ai.model.entity.AiConversation;
 import com.ff.mycloud.ai.model.entity.AiMessage;
 import com.ff.mycloud.ai.service.AiChatService;
 import com.ff.mycloud.ai.service.ChatAssistant;
+import com.ff.mycloud.ai.service.SimpleChatAssistant;
 import com.ff.mycloud.ai.tool.CloudDriveTools;
 import com.ff.mycloud.ai.config.ModelRegistry;
 import com.ff.mycloud.ai.tool.WebSearchTool;
@@ -57,6 +59,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final EmbeddingStore embeddingStore;
     private final DbChatMemoryStore chatMemoryStore;
     private final WebSearchEngine webSearchEngine;
+    private final AgentOrchestrator agentOrchestrator;
 
     public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
@@ -71,7 +74,8 @@ public class AiChatServiceImpl implements AiChatService {
                              EmbeddingStore embeddingStore,
                              DbChatMemoryStore chatMemoryStore,
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
-                             WebSearchEngine webSearchEngine) {
+                             WebSearchEngine webSearchEngine,
+                             AgentOrchestrator agentOrchestrator) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.objectMapper = objectMapper;
@@ -85,6 +89,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.embeddingStore = embeddingStore;
         this.chatMemoryStore = chatMemoryStore;
         this.webSearchEngine = webSearchEngine;
+        this.agentOrchestrator = agentOrchestrator;
     }
 
     @Override
@@ -142,21 +147,17 @@ public class AiChatServiceImpl implements AiChatService {
                 .minScore(0.6)
                 .build();
 
-        // ===== 每次请求新建 Tool + AiServices，userId 写死在实例里，绝对隔离 =====
-        List<Object> tools = new ArrayList<>();
-        tools.add(new CloudDriveTools(fileInfoService, fileSearchHandler,
-                userCenterService, fileRecentAccess, fileMapper, userId));
+        // ===== 普通聊天：SimpleChatAssistant，仅搜索 + RAG，无文件操作工具 =====
+        List<Object> chatTools = new ArrayList<>();
         if (webSearchEngine != null) {
-            tools.add(new WebSearchTool(webSearchEngine));
+            chatTools.add(new WebSearchTool(webSearchEngine));
         }
-
-        ChatAssistant chatAssistant = AiServices.builder(ChatAssistant.class)
+        SimpleChatAssistant chatAssistant = AiServices.builder(SimpleChatAssistant.class)
                 .streamingChatModel(streamingModel)
                 .chatModel(chatModel)
                 .contentRetriever(retriever)
                 .chatMemory(chatMemory)
-                .maxSequentialToolsInvocations(5)
-                .tools(tools)
+                .tools(chatTools)
                 .build();
 
         // ===== SseEmitter =====
@@ -255,6 +256,11 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         return emitter;
+    }
+
+    @Override
+    public SseEmitter sendAgentMessage(ChatRequest request) {
+        return agentOrchestrator.execute(request);
     }
 
     private String generateTitle(String userMessage, String aiResponse) {

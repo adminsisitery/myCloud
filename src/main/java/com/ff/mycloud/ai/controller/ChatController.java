@@ -29,6 +29,13 @@ public class ChatController {
         return aiChatService.sendMessage(request);
     }
 
+    /** Agent Plan-and-Execute 模式 */
+    @PostMapping(value = "/agent", produces = "text/event-stream;charset=UTF-8")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 1.0)
+    public SseEmitter agentChat(@RequestBody @Valid ChatRequest request) {
+        return aiChatService.sendAgentMessage(request);
+    }
+
     /** 获取可用模型列表（给前端下拉框） */
     @GetMapping("/models")
     public Map<String, Object> models() {

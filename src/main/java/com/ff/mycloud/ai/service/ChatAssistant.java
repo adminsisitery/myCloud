@@ -1,5 +1,6 @@
 package com.ff.mycloud.ai.service;
 
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
