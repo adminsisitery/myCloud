@@ -3,6 +3,7 @@ package com.ff.mycloud.ai.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ES.FileSearchRepository;
 import com.ff.mycloud.ai.ContentRetrievers.ESAndPgContentRetriever;
+import com.ff.mycloud.ai.cache.AICacheService;
 import com.ff.mycloud.ai.mapper.AiConversationMapper;
 import com.ff.mycloud.ai.mapper.AiMessageMapper;
 import com.ff.mycloud.ai.mapper.AiUsageLogMapper;
@@ -69,6 +70,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final WebSearchEngine webSearchEngine;
     private final AgentOrchestrator agentOrchestrator;
     private final FileSearchRepository fileSearchRepository;
+    private final AICacheService aiCacheService;
 
     public AiChatServiceImpl(AiConversationMapper conversationMapper,
                              AiMessageMapper aiMessageMapper,
@@ -88,7 +90,8 @@ public class AiChatServiceImpl implements AiChatService {
                              WebSearchEngine webSearchEngine,
                              AgentOrchestrator agentOrchestrator,
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
-                             FileSearchRepository fileSearchRepository) {
+                             FileSearchRepository fileSearchRepository,
+                             AICacheService aiCacheService) {
         this.conversationMapper = conversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.aiUsageLogMapper = aiUsageLogMapper;
@@ -106,6 +109,7 @@ public class AiChatServiceImpl implements AiChatService {
         this.webSearchEngine = webSearchEngine;
         this.agentOrchestrator = agentOrchestrator;
         this.fileSearchRepository = fileSearchRepository;
+        this.aiCacheService = aiCacheService;
     }
 
     @Override
@@ -146,6 +150,41 @@ public class AiChatServiceImpl implements AiChatService {
 
         final Long finalConversationId = conversationId;
         final boolean isFirstMessage = conv.getCount() == null || conv.getCount() == 0;
+
+        // ===== 新会话首条消息：检查 AI 响应缓存 =====
+        if (isFirstMessage) {
+            String cached = aiCacheService.get(userId, userMessage, modelName);
+            if (cached != null) {
+                // 缓存命中，直接模拟流式返回
+                SseEmitter hitEmitter = new SseEmitter(60_000L);
+                new Thread(() -> {
+                    try {
+                        for (String line : cached.split("(?<=\\n)")) {
+                            if (!line.isEmpty()) {
+                                hitEmitter.send(SseEmitter.event().name("chunk").data(line));
+                                try { Thread.sleep(15); } catch (InterruptedException ignored) {} // 模拟流式节奏
+                            }
+                        }
+                        hitEmitter.send(SseEmitter.event().name("done").data(
+                                objectMapper.writeValueAsString(Map.of(
+                                        "conversationId", finalConversationId,
+                                        "status", "cached"
+                                ))));
+                        hitEmitter.complete();
+
+                        // 保存缓存内容到消息表
+                        AiMessage cachedMsg = new AiMessage();
+                        cachedMsg.setConversationId(finalConversationId);
+                        cachedMsg.setRole("ASSISTANT");
+                        cachedMsg.setContent(cached);
+                        aiMessageMapper.insert(cachedMsg);
+                    } catch (Exception e) {
+                        hitEmitter.completeWithError(e);
+                    }
+                }).start();
+                return hitEmitter;
+            }
+        }
 
         // ===== ChatMemory：从 DB 加载历史，自动管理多轮对话 =====
         ChatMemory chatMemory = MessageWindowChatMemory.builder()
@@ -213,6 +252,8 @@ public class AiChatServiceImpl implements AiChatService {
                 emitter.send(SseEmitter.event().name("chunk").data(token));
             } catch (IOException e) {
                 emitter.completeWithError(e);
+            } catch (Exception ignored) {
+                // emitter 可能暂时不可用，不关闭，继续尝试后续 chunk
             }
         });
 
@@ -236,6 +277,10 @@ public class AiChatServiceImpl implements AiChatService {
                 if (isFirstMessage) {
                     String title = generateTitle(userMessage, assistantContent);
                     conversationMapper.update(finalConversationId, title);
+                    // AI 响应缓存：首条消息的结果缓存 15 分钟
+                    if (assistantContent != null && assistantContent.length() >= 10) {
+                        aiCacheService.put(userId, userMessage, modelName, assistantContent);
+                    }
                 }
 
                 int in = usage != null && usage.inputTokenCount() != null ? usage.inputTokenCount() : 0;
@@ -272,7 +317,7 @@ public class AiChatServiceImpl implements AiChatService {
                 ));
                 emitter.send(SseEmitter.event().name("done").data(doneData));
                 emitter.complete();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 emitter.completeWithError(e);
             }
         });
@@ -286,7 +331,7 @@ public class AiChatServiceImpl implements AiChatService {
                 ));
                 emitter.send(SseEmitter.event().name("error").data(errorData));
                 emitter.complete();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 emitter.completeWithError(e);
             }
         });
