@@ -58,4 +58,8 @@ public interface ChatAssistant {
             """)
     @UserMessage("{{msg}}")
     TokenStream chat(@V("msg") String userMessage);
+
+    /** 非流式版本，返回完整文本。Agent 模式下用于可靠获取工具调用后的完整回复 */
+    @UserMessage("{{msg}}")
+    String chatText(@V("msg") String userMessage);
 }

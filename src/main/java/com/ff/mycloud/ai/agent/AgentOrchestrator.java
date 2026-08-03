@@ -14,6 +14,7 @@ import com.ff.mycloud.ai.model.dto.ChatRequest;
 import com.ff.mycloud.ai.model.entity.AiConversation;
 import com.ff.mycloud.ai.model.entity.AiUsageLog;
 import com.ff.mycloud.ai.service.ChatAssistant;
+import com.ff.mycloud.ai.service.SearchChatAssistant;
 import com.ff.mycloud.ai.tool.CloudDriveTools;
 import com.ff.mycloud.ai.tool.WebSearchTool;
 import com.ff.mycloud.common.util.UserContext;
@@ -78,6 +79,7 @@ public class AgentOrchestrator {
     private final dev.langchain4j.model.embedding.EmbeddingModel embeddingModel;
     private final WebSearchEngine webSearchEngine;
     private final FileSearchRepository fileSearchRepository;
+    private final SearchChatAssistant searchChatAssistant;
 
     public AgentOrchestrator(ObjectMapper objectMapper,
                              ModelRegistry modelRegistry,
@@ -96,7 +98,8 @@ public class AgentOrchestrator {
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
                              WebSearchEngine webSearchEngine,
                              @org.springframework.beans.factory.annotation.Autowired(required = false)
-                             FileSearchRepository fileSearchRepository) {
+                             FileSearchRepository fileSearchRepository,
+                             SearchChatAssistant searchChatAssistant) {
         this.objectMapper = objectMapper;
         this.modelRegistry = modelRegistry;
         this.promptService = promptService;
@@ -113,6 +116,7 @@ public class AgentOrchestrator {
         this.embeddingModel = embeddingModel;
         this.webSearchEngine = webSearchEngine;
         this.fileSearchRepository = fileSearchRepository;
+        this.searchChatAssistant = searchChatAssistant;
     }
 
     /**
@@ -204,48 +208,24 @@ public class AgentOrchestrator {
                     ChatAssistant assistant = buildAssistant(
                             modelName, memory, tools, userId);
 
-                    StringBuilder stepOutput = new StringBuilder();
-                    TokenStream ts = assistant.chat(stepPrompt);
-
-                    ts.onPartialResponse(token -> {
-                        stepOutput.append(token);
-                        try {
-                            emitter.send(SseEmitter.event().name("chunk").data(token));
-                        } catch (IOException ignored) {}
-                    });
-
-                    // 同步等待这一步完成
-                    final int stepIndex = i;
-                    TokenUsage[] stepUsage = new TokenUsage[1];
-                    ts.onCompleteResponse(response -> {
-                        TokenUsage usage = response.tokenUsage();
-                        stepUsage[0] = usage;
-                    });
-
-                    ts.onError(throwable -> {
-                        log.error("Agent step {} 失败: {}", stepIndex, throwable.getMessage());
-                        step.setStatus("FAILED");
-                        step.setResult("执行失败: " + throwable.getMessage());
-                        try {
-                            sendEvent(emitter, "agent_step_done", Map.of(
-                                    "index", stepIndex, "status", "FAILED",
-                                    "result", step.getResult()
-                            ));
-                        } catch (Exception ignored) {}
-                    });
-
-                    ts.start();
+                    // 使用非流式接口获取完整回复，避免 AiServices + 工具时 TokenStream 不触发回调的问题
+                    String response = assistant.chatText(stepPrompt);
+                    StringBuilder stepOutput = new StringBuilder(response != null ? response : "");
+                    // 分块发送到前端，模拟流式效果
+                    if (response != null && !response.isBlank()) {
+                        for (String line : response.split("(?<=\\n)")) {
+                            if (!line.isEmpty()) {
+                                try {
+                                    emitter.send(SseEmitter.event().name("chunk").data(line));
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
 
                     // 步骤完成
                     step.setStatus("DONE");
                     step.setResult(stepOutput.toString());
                     totalOutput.append("\n").append(stepOutput);
-
-                    if (stepUsage[0] != null) {
-                        totalTokens += stepUsage[0].totalTokenCount();
-                        inputTokens += stepUsage[0].inputTokenCount() != null ? stepUsage[0].inputTokenCount() : 0;
-                        outputTokens += stepUsage[0].outputTokenCount() != null ? stepUsage[0].outputTokenCount() : 0;
-                    }
 
                     sendEvent(emitter, "agent_step_done", Map.of(
                             "index", i, "status", "DONE",
@@ -311,7 +291,7 @@ public class AgentOrchestrator {
                             Map.of("error", e.getMessage() != null ? e.getMessage() : "Agent error"));
                     emitter.send(SseEmitter.event().name("error").data(errorData));
                     emitter.complete();
-                } catch (IOException ignored) {}
+                } catch (Exception ignored) {}
             }
         }, "agent-orchestrator-" + conversationId).start();
 
@@ -386,7 +366,9 @@ public class AgentOrchestrator {
     private List<Object> buildTools(Long userId) {
         List<Object> tools = new ArrayList<>();
         tools.add(new CloudDriveTools(fileInfoService, fileSearchHandler,
-                userCenterService, fileRecentAccess, fileMapper, userId));
+                userCenterService, fileRecentAccess, fileMapper,
+                embeddingStore, embeddingModel, fileSearchRepository,
+                userId, searchChatAssistant));
         if (webSearchEngine != null) {
             tools.add(new WebSearchTool(webSearchEngine));
         }
@@ -432,7 +414,7 @@ public class AgentOrchestrator {
     private void sendEvent(SseEmitter emitter, String name, Object data) {
         try {
             emitter.send(SseEmitter.event().name(name).data(objectMapper.writeValueAsString(data)));
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.warn("SSE send {} 失败: {}", name, e.getMessage());
         }
     }

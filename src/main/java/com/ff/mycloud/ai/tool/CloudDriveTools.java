@@ -1,8 +1,12 @@
 package com.ff.mycloud.ai.tool;
 
+import com.ff.mycloud.ES.FileSearchRepository;
+import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.ai.service.SearchChatAssistant;
 import com.ff.mycloud.common.util.FileTypeUtil;
 import com.ff.mycloud.handler.FileSearchHandler;
 import com.ff.mycloud.mapper.FileMapper;
+import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.entity.UserCenter;
 import com.ff.mycloud.model.vo.FileListVO;
@@ -10,6 +14,13 @@ import com.ff.mycloud.repositorys.FileRecentAccess;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.UserCenterMapperService;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.EmbeddingSearchResult;
+import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.store.embedding.filter.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,9 +28,13 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
 
 /**
  * 云盘工具集 —— 供 AI Agent 调用的网盘操作工具。
@@ -40,7 +55,11 @@ public class CloudDriveTools {
     private final UserCenterMapperService userCenterService;
     private final FileRecentAccess fileRecentAccess;
     private final FileMapper fileMapper;
+    private final EmbeddingStore<TextSegment> embeddingStore;
+    private final EmbeddingModel embeddingModel;
+    private final FileSearchRepository fileSearchRepository;
     private final Long userId;
+    SearchChatAssistant searchChatAssistant;
 
     /** 每个工具方法的调用计数，防止 DeepSeek 无限循环调用 */
     private final Map<String, AtomicInteger> callCount = new ConcurrentHashMap<>();
@@ -50,13 +69,21 @@ public class CloudDriveTools {
                            UserCenterMapperService userCenterService,
                            FileRecentAccess fileRecentAccess,
                            FileMapper fileMapper,
-                           Long userId) {
+                           EmbeddingStore<TextSegment> embeddingStore,
+                           EmbeddingModel embeddingModel,
+                           FileSearchRepository fileSearchRepository,
+                           Long userId,
+                           SearchChatAssistant searchChatAssistant) {
         this.fileInfoService = fileInfoService;
         this.fileSearchHandler = fileSearchHandler;
         this.userCenterService = userCenterService;
         this.fileRecentAccess = fileRecentAccess;
         this.fileMapper = fileMapper;
+        this.embeddingStore = embeddingStore;
+        this.embeddingModel = embeddingModel;
+        this.fileSearchRepository = fileSearchRepository;
         this.userId = userId;
+        this.searchChatAssistant = searchChatAssistant;
     }
 
     /** 检查调用次数，超过限制返回提示 */
@@ -135,12 +162,29 @@ public class CloudDriveTools {
 
     // ==================== 文件搜索 ====================
 
-    @Tool("按照文件名模糊搜索文件")
+    /** 包含时间/大小/类型描述词的 pattern，命中才走 LLM 解析 */
+    private static final Pattern COMPLEX_QUERY = Pattern.compile(
+            "上周|本周|下周|今天|昨天|明天|前天|后天|上个月|这个月|下个月|今年|去年|" +
+            "星期|月份|号|日|天前|天前|天内|小时|分钟|" +
+            "MB|GB|KB|M|G|K|兆|字节|大于|小于|超过|不低于|不超过|以上|以下|之间|" +
+            "图片|视频|文档|表格|PDF|Word|Excel|PPT|合同|音乐|压缩|" +
+            "jpg|png|gif|mp4|mkv|mp3|doc|docx|xls|xlsx|ppt|pptx|pdf|zip|rar", Pattern.CASE_INSENSITIVE);
+
+    @Tool("搜索文件，支持自然语言（如'上周上传的合同'、'大于100MB的视频'）")
     public String findFile(String keyWord) {
         if (!checkLimit("findFile")) return "已达到调用上限，请直接使用已获取的数据回答用户";
         log.info("[Tool] findFile userId={}, keyWord={}", userId, keyWord);
 
-        List<FileListVO> files = fileSearchHandler.searchFiles(keyWord, userId);
+        // 纯关键词（如 "report"）直接搜，跳过 LLM 节省 ~500ms + token
+        QueryData qd;
+        if (COMPLEX_QUERY.matcher(keyWord).find()) {
+            qd = searchChatAssistant.chat(keyWord);
+        } else {
+            qd = new QueryData();
+            qd.setFileName(keyWord);
+        }
+
+        List<FileListVO> files = fileSearchHandler.searchFiles(qd, userId);
 
         if (files == null || files.isEmpty()) {
             return "未找到包含 **" + keyWord + "** 的文件";
@@ -523,6 +567,109 @@ public class CloudDriveTools {
             }
         }
         return false;
+    }
+
+    // ==================== 文档问答 ====================
+
+    @Tool("读取指定文件的完整文本内容，用于文件总结或深度分析。fileName 为文件名（含扩展名），如'report.pdf'")
+    public String readFileContent(String fileName) {
+        if (!checkLimit("readFileContent")) return "已达到调用上限，请直接使用已获取的数据回答用户";
+        log.info("[Tool] readFileContent userId={}, fileName={}", userId, fileName);
+
+        FileInfo file = findFileByName(fileName);
+        if (file == null) return "❌ 未找到文件：**" + fileName + "**，请先 listDirectory 确认文件存在";
+
+        // 1. 优先从 ES 读取完整 content（Tika 解析后的全文）
+        if (fileSearchRepository != null) {
+            Optional<FileDocument> doc = fileSearchRepository.findById(file.getId());
+            if (doc.isPresent() && doc.get().getContent() != null && !doc.get().getContent().isBlank()) {
+                String content = doc.get().getContent();
+                if (content.length() > 10000) {
+                    content = content.substring(0, 10000) + "\n\n...(内容过长，已截断前10000字符)";
+                }
+                String displayName = getFullName(file);
+                return "**【" + displayName + "】全文内容**\n\n" + content;
+            }
+        }
+
+        // 2. 回退：从 PGVector 拼接该文件的所有文本片段
+        if (embeddingStore != null && embeddingModel != null) {
+            try {
+                Embedding embedded = embeddingModel.embed(fileName).content();
+                EmbeddingSearchRequest req = EmbeddingSearchRequest.builder()
+                        .queryEmbedding(embedded)
+                        .maxResults(10)
+                        .minScore(0.0)
+                        .filter(buildFileFilter(file.getId()))
+                        .build();
+                EmbeddingSearchResult<TextSegment> result = embeddingStore.search(req);
+                if (!result.matches().isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    String displayName = getFullName(file);
+                    sb.append("**【").append(displayName).append("】文本内容**\n\n");
+                    for (int i = 0; i < result.matches().size(); i++) {
+                        sb.append(result.matches().get(i).embedded().text()).append("\n");
+                    }
+                    String content = sb.toString();
+                    if (content.length() > 10000) {
+                        content = content.substring(0, 10000) + "\n\n...(内容过长，已截断)";
+                    }
+                    return content;
+                }
+            } catch (Exception e) {
+                log.warn("[Tool] readFileContent PGVector fallback failed: {}", e.getMessage());
+            }
+        }
+
+        return "⚠️ 文件 **" + fileName + "** 的文本内容尚未索引。仅支持文档类型（PDF/Word/TXT/Markdown 等），图片/视频不可读取。";
+    }
+
+    @Tool("针对指定文件的内容提问，如合同条款查询、报告数据分析等。fileName 为文件名（含扩展名），question 为你的问题")
+    public String askDocument(String fileName, String question) {
+        if (!checkLimit("askDocument")) return "已达到调用上限，请直接使用已获取的数据回答用户";
+        log.info("[Tool] askDocument userId={}, fileName={}, question={}", userId, fileName, question);
+
+        if (question == null || question.isBlank()) return "❌ 问题不能为空";
+
+        FileInfo file = findFileByName(fileName);
+        if (file == null) return "❌ 未找到文件：**" + fileName + "**，请先 listDirectory 确认文件存在";
+
+        if (embeddingStore == null || embeddingModel == null) return "❌ 向量检索服务不可用，无法进行文档问答";
+
+        try {
+            Embedding embedded = embeddingModel.embed(question).content();
+            EmbeddingSearchRequest req = EmbeddingSearchRequest.builder()
+                    .queryEmbedding(embedded)
+                    .maxResults(3)
+                    .minScore(0.4)
+                    .filter(buildFileFilter(file.getId()))
+                    .build();
+            EmbeddingSearchResult<TextSegment> result = embeddingStore.search(req);
+
+            if (result.matches().isEmpty()) {
+                return "在 **" + fileName + "** 中未找到与「" + question + "」相关的片段。";
+            }
+
+            String displayName = getFullName(file);
+            StringBuilder sb = new StringBuilder();
+            sb.append("**【").append(displayName).append("】相关片段**（问题：").append(question).append("）\n\n");
+            for (int i = 0; i < result.matches().size(); i++) {
+                double score = result.matches().get(i).score();
+                sb.append("片段").append(i + 1).append("（相关度 ").append(String.format("%.2f", score)).append("）：\n");
+                sb.append(result.matches().get(i).embedded().text()).append("\n\n");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("[Tool] askDocument failed: {}", e.getMessage());
+            return "❌ 文档问答查询失败：" + e.getMessage();
+        }
+    }
+
+
+    /** 构建 fileId + userId 双重过滤 */
+    private Filter buildFileFilter(Long fileId) {
+        return metadataKey("fileId").isEqualTo(String.valueOf(fileId))
+                .and(metadataKey("userId").isEqualTo(String.valueOf(userId)));
     }
 
     // ==================== 获取当前时间 ====================

@@ -1,5 +1,6 @@
 package com.ff.mycloud.ai.config;
 
+import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import org.springframework.stereotype.Component;
@@ -22,11 +23,11 @@ public class ModelRegistry {
     private final Map<String, OpenAiStreamingChatModel> streamingModels = new LinkedHashMap<>();
     private final String defaultModelName;
 
-    public ModelRegistry(AIProperties properties) {
+    public ModelRegistry(AIProperties properties, List<ChatModelListener> listeners) {
         // 多模型模式
         if (properties.getModels() != null && !properties.getModels().isEmpty()) {
             for (AIProperties.ModelConfig cfg : properties.getModels()) {
-                register(cfg);
+                register(cfg, listeners);
             }
             this.defaultModelName = properties.getDefaultModel() != null
                     ? properties.getDefaultModel()
@@ -50,12 +51,13 @@ public class ModelRegistry {
         }
     }
 
-    private void register(AIProperties.ModelConfig cfg) {
+    private void register(AIProperties.ModelConfig cfg, List<ChatModelListener> listeners) {
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
                 .apiKey(cfg.getApiKey())
                 .baseUrl(cfg.getBaseUrl())
                 .modelName(cfg.getModel() != null ? cfg.getModel() : cfg.getName())
                 .timeout(Duration.ofSeconds(120))
+                .listeners(listeners)
                 .build();
 
         OpenAiStreamingChatModel streamingModel = OpenAiStreamingChatModel.builder()

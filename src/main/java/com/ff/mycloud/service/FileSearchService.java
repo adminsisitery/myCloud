@@ -1,5 +1,6 @@
 package com.ff.mycloud.service;
 
+import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
 
@@ -47,4 +48,9 @@ public interface FileSearchService {
      * @param fileDocument ES文件文档对象
      */
     void save(FileDocument fileDocument);
+
+    List<FileInfo> searchFileByQD(QueryData queryData);
+
+    /** Tool 专用，显式传入 userId，不依赖 SaToken 上下文 */
+    List<FileInfo> searchFileByQD(QueryData queryData, Long userId);
 }

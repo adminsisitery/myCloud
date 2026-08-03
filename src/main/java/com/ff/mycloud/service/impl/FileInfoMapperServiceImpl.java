@@ -1,13 +1,21 @@
 package com.ff.mycloud.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.common.util.UserContext;
+import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.repositorys.FileInfoMapper;
 import com.ff.mycloud.service.FileInfoMapperService;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 文件信息 Mapper 服务实现类
@@ -23,6 +31,12 @@ import java.util.List;
 public class FileInfoMapperServiceImpl
         extends ServiceImpl<FileInfoMapper,FileInfo>
         implements FileInfoMapperService {
+
+    private final FileMapper fileMapper;
+
+    public FileInfoMapperServiceImpl(FileMapper fileMapper) {
+        this.fileMapper = fileMapper;
+    }
 
     /**
      * 根据hash和用户id查找没有被删除的文件
@@ -215,6 +229,33 @@ public class FileInfoMapperServiceImpl
     }
 
     @Override
+    public List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId, QueryData qd) {
+        var wrapper = lambdaQuery().in(FileInfo::getId, ids)
+                .eq(FileInfo::getUserId, currentUserId)
+                .eq(FileInfo::getIsDeleted, false);
+
+        if (qd.getDateFrom() != null && !qd.getDateFrom().isBlank()) {
+            try { wrapper.ge(FileInfo::getCreatedAt, LocalDate.parse(qd.getDateFrom()).atStartOfDay()); }
+            catch (Exception ignored) {}
+        }
+        if (qd.getDateTo() != null && !qd.getDateTo().isBlank()) {
+            try { wrapper.le(FileInfo::getCreatedAt, LocalDate.parse(qd.getDateTo()).atTime(LocalTime.MAX)); }
+            catch (Exception ignored) {}
+        }
+        if (qd.getFileType() != null && !qd.getFileType().isBlank()) {
+            wrapper.eq(FileInfo::getFileSuffix, qd.getFileType().toLowerCase());
+        }
+        if (qd.getMinSize() != null && qd.getMinSize() > 0) {
+            wrapper.ge(FileInfo::getFileSize, qd.getMinSize());
+        }
+        if (qd.getMaxSize() != null && qd.getMaxSize() > 0) {
+            wrapper.le(FileInfo::getFileSize, qd.getMaxSize());
+        }
+
+        return wrapper.list();
+    }
+
+    @Override
     public List<FileInfo> getTrashFile(Long currentUserId) {
         return lambdaQuery().eq(FileInfo::getUserId,currentUserId)
                 .eq(FileInfo::getIsDeleted,true)
@@ -257,6 +298,50 @@ public class FileInfoMapperServiceImpl
                 .eq(FileInfo::getIsStarred, true)
                 .orderByDesc(FileInfo::getStarredAt)
                 .list();
+    }
+
+    @Override
+    public List<FileListVO> findbyQD(QueryData queryData) {
+        return findbyQD(queryData, UserContext.getCurrentUserId());
+    }
+
+    @Override
+    public List<FileListVO> findbyQD(QueryData queryData, Long userId) {
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId);
+        wrapper.eq(FileInfo::getIsDeleted, false);
+        wrapper.eq(FileInfo::getIsFolder, false);
+
+        if (queryData.getFileName() != null && !queryData.getFileName().isBlank()) {
+            wrapper.and(w -> w
+                    .like(FileInfo::getFilename, queryData.getFileName())
+                    .or()
+                    .like(FileInfo::getOriginalFilename, queryData.getFileName()));
+        }
+        if (queryData.getDateFrom() != null && !queryData.getDateFrom().isBlank()) {
+            try {
+                wrapper.ge(FileInfo::getCreatedAt,
+                        LocalDate.parse(queryData.getDateFrom()).atStartOfDay());
+            } catch (Exception ignored) {}
+        }
+        if (queryData.getDateTo() != null && !queryData.getDateTo().isBlank()) {
+            try {
+                wrapper.le(FileInfo::getCreatedAt,
+                        LocalDate.parse(queryData.getDateTo()).atTime(LocalTime.MAX));
+            } catch (Exception ignored) {}
+        }
+        if (queryData.getFileType() != null && !queryData.getFileType().isBlank()) {
+            wrapper.eq(FileInfo::getFileSuffix, queryData.getFileType().toLowerCase());
+        }
+        if (queryData.getMinSize() != null && queryData.getMinSize() > 0) {
+            wrapper.ge(FileInfo::getFileSize, queryData.getMinSize());
+        }
+        if (queryData.getMaxSize() != null && queryData.getMaxSize() > 0) {
+            wrapper.le(FileInfo::getFileSize, queryData.getMaxSize());
+        }
+
+        List<FileInfo> files = this.list(wrapper);
+        return files.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
     }
 
 }

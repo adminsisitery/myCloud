@@ -8,6 +8,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 
 
@@ -33,6 +34,7 @@ import org.springframework.context.annotation.Bean;
 @MapperScan("com.ff.mycloud.repositorys")
 @MapperScan("com.ff.mycloud.ai.mapper")
 @EnableConfigurationProperties(AIProperties.class)
+@EnableCaching
 public class MyCloudApplication {
 
     /**

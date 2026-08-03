@@ -1,8 +1,10 @@
 package com.ff.mycloud.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.vo.FileListVO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -112,7 +114,11 @@ public interface FileInfoMapperService extends IService<FileInfo> {
      * @param currentUserId  当前用户ID
      * @return 匹配的文件信息列表
      */
+
     List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId);
+
+    /** ES 路径专用：ID 校验的同时把 date/type/size 过滤也下推到 SQL */
+    List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId, QueryData qd);
 
     List<FileInfo> getTrashFile(Long currentUserId);
 
@@ -135,4 +141,9 @@ public interface FileInfoMapperService extends IService<FileInfo> {
      * @return 收藏的文件列表
      */
     List<FileInfo> findStarredFiles(Long currentUserId);
+
+    List<FileListVO> findbyQD(QueryData queryData);
+
+    /** Tool 专用，显式传入 userId，不依赖 SaToken 上下文 */
+    List<FileListVO> findbyQD(QueryData queryData, Long userId);
 }

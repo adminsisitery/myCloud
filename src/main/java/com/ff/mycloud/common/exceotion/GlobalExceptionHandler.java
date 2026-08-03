@@ -123,6 +123,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理静态资源缺失（如 favicon.ico），不污染日志
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException e) {
+        return ResponseEntity.notFound().build();
+    }
+
+    /**
      * 兜底处理所有未被上述处理器捕获的异常
      *
      * @param e 未知异常

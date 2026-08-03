@@ -1,5 +1,6 @@
 package com.ff.mycloud.handler;
 
+import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.model.vo.FileListVO;
 
 import java.util.List;
@@ -13,4 +14,6 @@ public interface FileSearchHandler {
     default List<FileListVO> searchFiles(String keyword, Long userId) {
         return searchFiles(keyword);
     }
+
+    List<FileListVO> searchFiles(QueryData queryData, Long userId);
 }

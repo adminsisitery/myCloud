@@ -1,6 +1,7 @@
 package com.ff.mycloud.handler;
 
 
+import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
@@ -36,5 +37,10 @@ public class MySQLFileSearchHandler implements FileSearchHandler {
     public List<FileListVO> searchFiles(String keyword, Long userId) {
         List<FileInfo> fileInfos = fileInfoMapperService.findBykeyWord(keyword, userId);
         return fileInfos.stream().map(fileMapper::toFileListVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<FileListVO> searchFiles(QueryData queryData, Long userId) {
+        return fileInfoMapperService.findbyQD(queryData, userId);
     }
 }

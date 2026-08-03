@@ -1,6 +1,7 @@
 package com.ff.mycloud.service.impl;
 
 import com.ff.mycloud.ES.FileSearchRepository;
+import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
@@ -10,9 +11,14 @@ import com.ff.mycloud.service.FileSearchService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -114,6 +120,79 @@ public class FileSearchServiceImpl implements FileSearchService {
     @Override
     public void save(FileDocument fileDocument) {
         fileSearchRepository.save(fileDocument);
+    }
+
+    @Override
+    public List<FileInfo> searchFileByQD(QueryData queryData) {
+        return searchFileByQD(queryData, UserContext.getCurrentUserId());
+    }
+
+    /**
+     * 基于 QueryData 的结构化搜索（Tool 专用，显式传入 userId）。
+     * <p>
+     * 有关键词时：ES 命中 → MySQL 一次查询完成校验+过滤 → 加权排序。
+     * 无关键词时：MySQL LambdaWrapper，所有条件下推到 DB。
+     * </p>
+     */
+    @Override
+    public List<FileInfo> searchFileByQD(QueryData queryData, Long userId) {
+        String keyword = queryData.getFileName();
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+
+        if (hasKeyword) {
+            // ===== ES 关键词 + 权重记录 =====
+            // weight=2 文件名命中, weight=1 内容命中
+            Map<Long, Integer> weightMap = new LinkedHashMap<>();
+            List<FileDocument> byFileName = fileSearchRepository.findByFileNameContainingAndUserId(keyword, userId);
+            List<FileDocument> byContent  = fileSearchRepository.findByContentContainingAndUserId(keyword, userId);
+            if (byFileName != null) byFileName.forEach(d -> weightMap.merge(d.getId(), 2, Integer::sum));
+            if (byContent  != null) byContent.forEach(d  -> weightMap.merge(d.getId(), 1, Integer::sum));
+
+            if (weightMap.isEmpty()) return List.of();
+
+            // MySQL 一次查询：校验 ID + 下推 date/type/size 过滤
+            List<FileInfo> files = fileInfoMapperService.findInIdAndUserId(
+                    new ArrayList<>(weightMap.keySet()), userId, queryData);
+
+            // 加权排序：文件名+内容命中排前面
+            files.sort((a, b) -> Integer.compare(
+                    weightMap.getOrDefault(b.getId(), 0),
+                    weightMap.getOrDefault(a.getId(), 0)));
+
+            return files;
+        }
+
+        // ===== 无关键词 → MySQL LambdaWrapper =====
+        LocalDateTime dateFrom = tryParseDate(queryData.getDateFrom(), true);
+        LocalDateTime dateTo   = tryParseDate(queryData.getDateTo(), false);
+
+        List<FileInfo> files = fileInfoMapperService.lambdaQuery()
+                .eq(FileInfo::getUserId, userId)
+                .eq(FileInfo::getIsDeleted, false)
+                .eq(FileInfo::getIsFolder, false)
+                .apply(dateFrom != null, "created_at >= {0}", dateFrom)
+                .apply(dateTo   != null, "created_at <= {0}", dateTo)
+                .eq(queryData.getFileType() != null && !queryData.getFileType().isBlank(),
+                        FileInfo::getFileSuffix,
+                        queryData.getFileType() != null ? queryData.getFileType().toLowerCase() : null)
+                .ge(queryData.getMinSize() != null && queryData.getMinSize() > 0,
+                        FileInfo::getFileSize, queryData.getMinSize())
+                .le(queryData.getMaxSize() != null && queryData.getMaxSize() > 0,
+                        FileInfo::getFileSize, queryData.getMaxSize())
+                .list();
+
+        return files != null ? files : List.of();
+    }
+
+    private LocalDateTime tryParseDate(String date, boolean startOfDay) {
+        if (date == null || date.isBlank()) return null;
+        try {
+            return startOfDay
+                    ? LocalDate.parse(date).atStartOfDay()
+                    : LocalDate.parse(date).atTime(LocalTime.MAX);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

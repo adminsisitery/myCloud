@@ -239,3 +239,19 @@ ai:
       2. 涉及文件操作要具体描述（文件名、位置等）
       3. 步骤数 2-6 个，简单请求 1 个即可
       4. 文件操作前先浏览确认
+
+# Langfuse Cloud 可观测性配置
+langfuse:
+  public-key: pk-lf-cbd00d29-b075-46e7-9a6f-3cf282a0941d
+  secret-key: sk-lf-89fbb21d-5041-4fe5-a130-259666637992
+  base-url: https://cloud.langfuse.com
+
+# ===== Swagger / OpenAPI =====
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json

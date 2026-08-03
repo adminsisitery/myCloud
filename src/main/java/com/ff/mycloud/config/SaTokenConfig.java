@@ -47,6 +47,11 @@ public class SaTokenConfig implements WebMvcConfigurer {
                             "/api/shares/*/content",
                             // Github OAuth 授权相关
                             "/api/auth/github/**",
+                            // Swagger 文档
+                            "/swagger-ui/**",
+                            "/v3/api-docs",
+                            "/v3/api-docs/**",
+                            "/swagger-resources/**",
                             // Tomcat 内部错误页面
                             "/error"
                         )
