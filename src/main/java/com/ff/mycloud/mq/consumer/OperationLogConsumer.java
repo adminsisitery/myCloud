@@ -4,6 +4,8 @@ import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.OperationLog;
 import com.ff.mycloud.service.OperationLogMapperService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,6 +38,7 @@ public class OperationLogConsumer {
      *
      * SETNX 去重：已经消费过的消息直接跳过，去重窗口24小时。
      */
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 3000))
     @RabbitListener(queues = CommonConstants.LogMQ.QUEUE)
     public void handleLog(OperationLog message) {
         if (!messageDedupService.tryConsume(message.getMsgId())) {

@@ -5,6 +5,8 @@ import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.service.FileSearchService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,18 +35,21 @@ public class ESSyncConsumer {
     }
 
     /** 文件上传/秒传 → 写入ES索引 */
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 3000))
     @RabbitListener(queues = ESConstants.QUEUE.INSERT_QUEUE)
     public void esInsert(FileDocument message) {
         fileSearchService.save(message);
     }
 
     /** 文件删除 → 从ES索引中删除 */
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 3000))
     @RabbitListener(queues = ESConstants.QUEUE.DELETE_QUEUE)
     public void esDelete(FileDocument message) {
         fileSearchService.del(message.getId());
     }
 
     /** 文件重命名 → 更新ES索引中的文件名 */
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 3000))
     @RabbitListener(queues = ESConstants.QUEUE.UPDATE_QUEUE)
     public void esUpdate(FileDocument message) {
         fileSearchService.renameById(message.getId(), message.getFileName());
