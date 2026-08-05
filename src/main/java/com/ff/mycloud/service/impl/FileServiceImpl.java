@@ -17,6 +17,7 @@ import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.repositorys.FileRecentAccess;
+import com.ff.mycloud.repositorys.UserMapper;
 import com.ff.mycloud.service.*;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.parser.apache.tika.ApacheTikaDocumentParser;
@@ -32,10 +33,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -215,7 +213,7 @@ public class FileServiceImpl implements FileService {
         //检查是不是文件并存在
         if (!file.exists()||!file.isFile()){
             log.info("文件不存在或不是常规文件");
-        //     uploadProgressService.completeUploadTask(taskId, false, "文件不存在或不是常规文件");
+            upLoadProgressService.completeUploadTask(taskId, false, "文件不存在或不是常规文件");
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
         //计算文件的SHA-256
@@ -305,16 +303,33 @@ public class FileServiceImpl implements FileService {
             fileDocument.setFileType(fileInfo.getFileType());
             fileDocument.setUserId(currentUserId);
             rabbitMqService.sendInsertMessage(fileDocument);
+
+            UserCenter byUserId = userCenterMapperService.getByUserId(UserContext.getCurrentUserId());
+            long totalSpace = byUserId.getTotalSpace();
+            long usedSpace = byUserId.getUsedSpace();
+
+            double usagePercent = usedSpace / (double) totalSpace;
+            if (usagePercent > 0.9) {
+                UsageMessage usageMessage = new UsageMessage();
+                usageMessage.setUserId(currentUserId);
+                usageMessage.setUsageSize(usedSpace);
+                usageMessage.setTotalSize(totalSpace);
+                usageMessage.setMessage("可用空间剩余不足10%，已用"
+                        + String.format("%.1f", usagePercent * 100) + "%");
+                rabbitMqService.UsageChanged(usageMessage);
+            }
             sendOpLog(currentUserId, OperationLog.OP_UPLOAD, fileInfo.getId(),
                     fileDocument.getFileName(), fileInfo.getFileSize(), null);
         } catch (Exception e) {
-            // DB 保存失败，删掉已上传的 OSS 文件作为补偿
-            log.error("DB save failed after OSS upload, deleting orphan file: {}", path, e);
+            // DB 保存失败：删 OSS + 更新 Redis 任务状态
+            log.error("DB save failed after OSS upload, cleaning up: path={}, taskId={}", path, taskId, e);
             try {
                 storageService.deleteFile(path);
             } catch (Exception ignored) {
                 log.warn("Failed to delete orphan OSS file: {}", path);
             }
+            upLoadProgressService.completeUploadTask(taskId, false,
+                    "文件信息保存失败: " + (e.getMessage() != null ? e.getMessage() : "未知错误"));
             throw e;
         }
     }

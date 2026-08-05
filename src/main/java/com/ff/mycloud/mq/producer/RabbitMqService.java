@@ -3,9 +3,7 @@ package com.ff.mycloud.mq.producer;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.OperationLog;
 import com.ff.mycloud.model.entity.PgSender;
-import dev.langchain4j.data.segment.TextSegment;
-
-import java.util.List;
+import com.ff.mycloud.model.entity.UsageMessage;
 
 /**
  * RabbitMQ消息发送服务接口
@@ -56,4 +54,7 @@ public interface RabbitMqService {
     void sendInsertPG(PgSender pgs);
 
     void sendDeletePG(PgSender pgs);
+
+    void UsageChanged(UsageMessage usageMessage);
+
 }

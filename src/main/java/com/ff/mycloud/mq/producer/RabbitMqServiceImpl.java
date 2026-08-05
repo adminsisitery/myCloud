@@ -5,11 +5,10 @@ import com.ff.mycloud.common.constant.ESConstants;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.OperationLog;
 import com.ff.mycloud.model.entity.PgSender;
-import dev.langchain4j.data.segment.TextSegment;
+import com.ff.mycloud.model.entity.UsageMessage;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -106,5 +105,10 @@ public class RabbitMqServiceImpl implements RabbitMqService {
     @Override
     public void sendDeletePG(PgSender pgs) {
         rabbitTemplate.convertAndSend(CommonConstants.PG.TOPIC_EXCHANGE, CommonConstants.PG.DELETE_KEY, pgs);
+    }
+
+    @Override
+    public void UsageChanged(UsageMessage usageMessage) {
+        rabbitTemplate.convertAndSend(CommonConstants.USAGE.USAGE_EXCHANGE,CommonConstants.USAGE.USAGE_KEY,usageMessage);
     }
 }

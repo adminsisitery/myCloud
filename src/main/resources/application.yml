@@ -29,6 +29,9 @@ spring:
     username: mycloud
     password: 2005525a
     virtual-host: feicloud
+    listener:
+      simple:
+        default-requeue-rejected: false   # 消费失败不重新入队，配合DLX进入死信队列
 
 
   # 数据库配置

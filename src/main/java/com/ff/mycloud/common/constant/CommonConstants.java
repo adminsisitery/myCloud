@@ -116,4 +116,19 @@ public class CommonConstants {
         public static final String DELETE_KEY = "PG_delete";
         public static final String DELETE_QUEUE = "pg.delete.queue";
     }
+
+    public static class USAGE {
+        public static final String KEY_PREFIX = "usage:";
+        public static final String USAGE_EXCHANGE = "usage:exchange";
+        public static final String USAGE_QUEUE = "usage:queue";
+        public static final String USAGE_KEY = "usage";
+        public static final String USAGE_TOPIC = "usage:topic";
+    }
+
+    /** 死信队列常量 */
+    public static class DLQ {
+        public static final String DLX_EXCHANGE = "dlx:exchange";
+        public static final String DLX_QUEUE = "dlx:queue";
+        public static final String DLX_KEY = "dlx";
+    }
 } 
