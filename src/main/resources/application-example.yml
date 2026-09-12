@@ -24,11 +24,11 @@ spring:
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
   rabbitmq:
-    host: 47.95.192.221
+    host: ${SPRING_RABBITMQ_HOST}
     port: 5672
-    username: mycloud
-    password: 2005525a
-    virtual-host: feicloud
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST}
     listener:
       simple:
         default-requeue-rejected: false   # 消费失败不重新入队，配合DLX进入死信队列
@@ -37,9 +37,9 @@ spring:
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://rm-bp1k9t18kfewh9780bo.mysql.rds.aliyuncs.com:3306/cloud_drive?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: root
-    password: LPF2005525a
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     hikari:
       connection-timeout: 30000
       maximum-pool-size: 10
@@ -49,8 +49,8 @@ spring:
   mail:
     host: smtp.qq.com
     port: 587
-    username: 1323880492@qq.com
-    password: cowhuobbddvzbaej
+    username: ${SPRING_MAIL_USERNAME}
+    password: ${SPRING_MAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -69,8 +69,8 @@ spring:
     redisson:
       config: |
         singleServerConfig:
-          address: "redis://47.95.192.221:6379"
-          password: feifei2005525a
+          address: ${SPRING_REDIS_REDISSON_CONFIG_ADDRESS}
+          password: ${SPRING_REDIS_REDISSON_CONFIG_PASSWORD}
           database: 0
 
 
@@ -106,22 +106,22 @@ sa-token:
 # OSS配置
 oss:
   enabled: true
-  access-key-id: REDACTED_KEY
-  access-key-secret: REDACTED_SECRET
+  access-key-id: ${OSS_ACCESS_KEY_ID}
+  access-key-secret: ${OSS_ACCESS_KEY_SECRET}
   endpoint: oss-cn-hangzhou.aliyuncs.com
-  cdn-endpoint: https://pre.feifei.ltd
-  bucket-name: feifeioss
+  cdn-endpoint: ${OSS_CDN_ENDPOINT}
+  bucket-name: ${OSS_BUCKET_NAME}
   sts:
     region-id: ${OSS_STS_REGION_ID:cn-hangzhou}
-    role-arn: ${OSS_STS_ROLE_ARN:}
+    role-arn: ${OSS_STS_ROLE_ARN}
     role-session-name: mycloud-upload
     duration-seconds: 900
     confirm-grace-seconds: 900
     max-parallel-parts: 6
 oauth:
   github:
-    client-id:  Ov23liWWn2l1Q6nj4gHM # 必须填，不能空
-    client-secret: 7ac36eaf827915df6e5bb4d9218e30e045759fe1  # 必须填，不能空
+    client-id: ${OAUTH_GITHUB_CLIENT_ID}   # 必须填，不能空
+    client-secret: ${OAUTH_GITHUB_CLIENT_SECRET}   # 必须填，不能空
     redirect-uri: http://localhost:8080/api/auth/github/callback  # 必须和GitHub应用配置的回调地址一致
 
 #Mybatis
@@ -142,7 +142,7 @@ ai:
   models:
     - name: deepseek-chat
       base-url: https://api.deepseek.com
-      api-key: sk-580f9fb8e7e24922b85dd422c17133e7
+      api-key: ${AI_MODELS_DEEPSEEK_CHAT_API_KEY}
       model: deepseek-chat
       default: true
       pricing:
@@ -151,16 +151,16 @@ ai:
 
     - name: qwen-Flash
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: sk-ws-H.EIEXMPD.HfMB.MEYCIQCCQkwQWB2RwtoV6KWsqW7Lilqb5yX0yLi_ODhmF7BFdQIhAKTls9ikPHHh04lFiR66VvLI1yT6JJ3_aZY5MafGQlXU
+      api-key: ${AI_MODELS_QWEN_FLASH_API_KEY}
       model: qwen-flash
       pricing:
         input-price: 0.5      # ¥0.5/百万 input tokens
         output-price: 2.0     # ¥2/百万 output tokens
 
-  tavily-api-key: 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
+  tavily-api-key: ${AI_TAVILY_API_KEY}
   # 通义 Embedding（独立于 chat）
   embedding-base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  embedding-api-key: sk-ws-H.EIRMHMY.u3Nl.MEQCIAijQTHX_JIKBUnBOWO_124wENDcahl9BDn8dyJl-5KlAiASYDt8Frbcoszg__2PsNsC9JL1ZZwxejWbpYYO5Ud_Og
+  embedding-api-key: ${AI_EMBEDDING_API_KEY}
   embedding-model: text-embedding-v4
   embedding-dimensions: 1536
   timeout: 120s
@@ -258,8 +258,8 @@ ai:
 
 # Langfuse Cloud 可观测性配置
 langfuse:
-  public-key: pk-lf-cbd00d29-b075-46e7-9a6f-3cf282a0941d
-  secret-key: sk-lf-89fbb21d-5041-4fe5-a130-259666637992
+  public-key: ${LANGFUSE_PUBLIC_KEY}
+  secret-key: ${LANGFUSE_SECRET_KEY}
   base-url: https://cloud.langfuse.com
 
 # ===== Swagger / OpenAPI =====

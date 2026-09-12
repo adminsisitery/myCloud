@@ -1,5 +1,0 @@
-#ai配置
-ai:
-  api-key: sk-16a0bb7860c143c2ae3eb3dd3d6c8efa
-  base-url: https://api.deepseek.com
-  model: deepseek-v4-flash

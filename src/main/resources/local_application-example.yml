@@ -1,0 +1,5 @@
+#ai配置
+ai:
+  api-key: ${AI_API_KEY}
+  base-url: https://api.deepseek.com
+  model: deepseek-v4-flash
