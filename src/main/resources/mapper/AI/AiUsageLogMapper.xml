@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ff.mycloud.ai.mapper.AiUsageLogMapper">
+
+    <!-- 总览统计 -->
+    <select id="costSummary" resultType="map">
+        SELECT
+            COALESCE(SUM(total_tokens), 0)     AS totalTokens,
+            CAST(COALESCE(SUM(prompt_tokens), 0) AS UNSIGNED) AS promptTokens,
+            CAST(COALESCE(SUM(completion_tokens), 0) AS UNSIGNED) AS completionTokens,
+            COUNT(*)                            AS callCount,
+            COALESCE(AVG(latency_ms), 0)        AS avgLatencyMs
+        FROM t_ai_usage_log
+        WHERE created_at BETWEEN #{start} AND #{end}
+    </select>
+
+    <!-- 按 model + scene 分组 -->
+    <select id="costByModel" resultType="map">
+        SELECT
+            model,
+            scene,
+            CAST(COALESCE(SUM(prompt_tokens), 0) AS UNSIGNED)    AS promptTokens,
+            CAST(COALESCE(SUM(completion_tokens), 0) AS UNSIGNED) AS completionTokens,
+            CAST(COALESCE(SUM(total_tokens), 0) AS UNSIGNED)      AS totalTokens,
+            COUNT(*)                                   AS callCount
+        FROM t_ai_usage_log
+        WHERE created_at BETWEEN #{start} AND #{end}
+        GROUP BY model, scene
+        ORDER BY totalTokens DESC
+    </select>
+
+    <!-- 按天趋势 -->
+    <select id="costDaily" resultType="map">
+        SELECT
+            DATE_FORMAT(created_at, '%Y-%m-%d')         AS date,
+            CAST(COALESCE(SUM(total_tokens), 0) AS UNSIGNED) AS totalTokens,
+            COUNT(*)                                   AS callCount,
+            COALESCE(AVG(latency_ms), 0)               AS avgLatencyMs
+        FROM t_ai_usage_log
+        WHERE created_at BETWEEN #{start} AND #{end}
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+        ORDER BY date ASC
+    </select>
+
+</mapper>
