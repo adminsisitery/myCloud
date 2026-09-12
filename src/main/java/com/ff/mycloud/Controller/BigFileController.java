@@ -43,7 +43,7 @@ public class BigFileController {
      * @return 上传结果
      */
     @PostMapping("/upload")
-    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
+    @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 20.0, timeout = 1000)
     public Result<ChunkPartVO> upload(@RequestParam("uploadId") String uploadId,
                                        @RequestParam("partNumber") Integer partNumber,
                                        @RequestParam("chunk") MultipartFile chunk) {

@@ -26,9 +26,8 @@ import jakarta.validation.Valid;
 import jodd.util.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.ResponseCookie;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -36,6 +35,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.net.http.HttpResponse;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -254,7 +255,7 @@ public class ShareController {
      */
     @GetMapping("/{shareCode}/content")
     @RateLimit(dimensions = { RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
-    public ResponseEntity<byte[]> downloadSharedFile(@PathVariable String shareCode, HttpServletResponse response) {
+    public void downloadSharedFile(@PathVariable String shareCode, HttpServletResponse response) {
         // 从 Cookie 中获取分享令牌
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
                 .getRequest();
@@ -265,20 +266,21 @@ public class ShareController {
         FileInfo fileInfoByShare = getFileInfoByShare(shareCode, token);
         if (fileInfoByShare.getIsFolder()) {
             // 文件夹：压缩打包后通过 response 输出
-            folderService.downLoadFolder(fileInfoByShare.getId(),response);
+            folderService.downLoadSharedFolder(fileInfoByShare.getId(), fileInfoByShare.getUserId(), response);
         } else {
-            // 单文件：返回字节流
+            // 单文件：直接写响应，避免与文件夹分支混用 null ResponseEntity
             byte[] file = shareServiceImpl.downloadSharedFile(shareCode, token);
-            // 设置响应头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", shareServiceImpl.getFilename(shareCode));
-            headers.setContentLength(file.length);
-            return ResponseEntity.ok()
-                    .headers(headers)
-                    .body(file);
+            response.setContentType("application/octet-stream");
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                    .filename(shareServiceImpl.getFilename(shareCode), StandardCharsets.UTF_8)
+                    .build().toString());
+            response.setContentLengthLong(file.length);
+            try {
+                response.getOutputStream().write(file);
+            } catch (IOException e) {
+                throw new BusinessException(ErrorCode.FILE_DOWNLOAD_FAILED, "分享文件下载失败");
+            }
         }
-        return null;
     }
 
     /**
@@ -293,21 +295,8 @@ public class ShareController {
      * @throws BusinessException 当分享不存在、令牌无效、已过期或文件已被删除时抛出
      */
     public FileInfo getFileInfoByShare(String shareCode, String token) {
-        // 打印调试信息
-        System.out.println("收到 shareCode: " + shareCode);
-        System.out.println("收到 token: " + token);
-
         // 1. 验证 shareCode 是否存在
         ShareRecord shareRecord = shareRecordMapperService.findByShareCode(shareCode);
-
-        // 打印调试信息
-        System.out.println("数据库查到的 shareRecord: " + shareRecord);
-        if (shareRecord != null) {
-            System.out.println("shareRecord.isExpired() 字段值: " + shareRecord.getIsExpired());
-            System.out.println("shareRecord.expireTime: " + shareRecord.getExpireTime());
-            System.out.println("当前时间: " + LocalDateTime.now());
-            System.out.println("是否真的过期(逻辑判断): " + shareRecord.getExpireTime().isBefore(LocalDateTime.now()));
-        }
 
         if (shareRecord == null) {
             throw new BusinessException(ErrorCode.SHARE_NOT_FOUND);

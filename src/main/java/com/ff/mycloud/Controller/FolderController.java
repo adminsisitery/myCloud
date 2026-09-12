@@ -65,8 +65,7 @@ public class FolderController {
      */
     @GetMapping("/{fileId}/content")
     @RateLimit(dimensions = { RateLimit.Dimension.USER, RateLimit.Dimension.IP }, permitsPerSecond = 2.0, timeout = 1000)
-    public ResponseEntity<byte[]> downloadFile(@PathVariable long fileId, HttpServletResponse response) {
+    public void downloadFile(@PathVariable long fileId, HttpServletResponse response) {
         folderService.downLoadFolder(fileId,response);
-        return null;
     }
 }

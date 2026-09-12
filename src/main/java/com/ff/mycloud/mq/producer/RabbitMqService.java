@@ -57,4 +57,6 @@ public interface RabbitMqService {
 
     void UsageChanged(UsageMessage usageMessage);
 
+    void sendFolderDownloadTask(String taskId);
+
 }

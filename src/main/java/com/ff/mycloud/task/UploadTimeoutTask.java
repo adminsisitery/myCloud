@@ -163,8 +163,12 @@ public class UploadTimeoutTask {
 
             try {
                 // 1. 取消 OSS 分片上传
-                storageServiceFactory.getStorageService()
-                        .cancelUpload(task.getOssUploadId(), task.getObjectKey());
+                if (Boolean.TRUE.equals(task.getStorageCompleted())) {
+                    storageServiceFactory.getStorageService().deleteFile(task.getObjectKey());
+                } else {
+                    storageServiceFactory.getStorageService()
+                            .cancelUpload(task.getOssUploadId(), task.getObjectKey());
+                }
 
                 // 2. 归还预占空间
                 userCenterMapperService.releaseSpace(task.getUserId(), task.getFileSize());

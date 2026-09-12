@@ -5,6 +5,7 @@ import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
+import com.ff.mycloud.model.vo.FileDownloadVO;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,6 +59,9 @@ public interface FileService {
      * @return 文件的字节数组
      */
     byte[] downloadFile(Long fileId);
+
+    /** 校验文件权限并返回下载所需元数据，不读取文件内容。 */
+    FileDownloadVO prepareDownload(Long fileId);
 
     /**
      * 获取文件名

@@ -13,6 +13,7 @@ import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.*;
 import com.ff.mycloud.model.vo.FileCheckVO;
+import com.ff.mycloud.model.vo.FileDownloadVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
@@ -375,6 +376,25 @@ public class FileServiceImpl implements FileService {
         // 记录最近访问
         recordAccess(fileId);
         return retrieveFileContent(andValidateFile);
+    }
+
+    @Override
+    public FileDownloadVO prepareDownload(Long fileId) {
+        FileInfo file = getAndValidateFile(fileId, UserContext.getCurrentUser());
+        ExceptionUtil.throwIf(Boolean.TRUE.equals(file.getIsFolder()), ErrorCode.CANNOT_DOWNLOAD_FOLDER);
+        recordAccess(fileId);
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isBlank()) {
+            filename = file.getFilename();
+            if (file.getFileSuffix() != null && !file.getFileSuffix().isBlank()) {
+                filename += "." + file.getFileSuffix();
+            }
+        }
+        String contentType = file.getFileType();
+        if (contentType == null || contentType.isBlank()) {
+            contentType = "application/octet-stream";
+        }
+        return new FileDownloadVO(file.getPath(), filename, contentType, file.getFileSize());
     }
 
     /**

@@ -166,11 +166,8 @@ public class OssStorageServiceImpl implements StorageService {
     @Override
     public byte[] downloadFile(String filePath) {
         checkOssEnabled();
-        try {
-        OSS ossClient = null;
-        ossClient = getOssClient();
-        OSSObject object = ossClient.getObject(new GetObjectRequest(ossProProperties.getBucketName(), filePath));
-        return object.getObjectContent().readAllBytes();
+        try (InputStream inputStream = getFile(filePath)) {
+            return inputStream.readAllBytes();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -205,11 +202,83 @@ public class OssStorageServiceImpl implements StorageService {
     @Override
     public InputStream getFile(String path) {
         checkOssEnabled();
-        OSS ossClient=null;
-        ossClient = getOssClient();
-        OSSObject object = ossClient.getObject(new GetObjectRequest(ossProProperties.getBucketName(), path));
-        InputStream objectContent = object.getObjectContent();
-        return objectContent;
+        OSS ossClient = getOssClient();
+        try {
+            OSSObject object = ossClient.getObject(new GetObjectRequest(ossProProperties.getBucketName(), path));
+            return new OssManagedInputStream(object.getObjectContent(), ossClient);
+        } catch (RuntimeException e) {
+            closeOssClient(ossClient);
+            throw e;
+        }
+    }
+
+    @Override
+    public void uploadObject(String objectKey, InputStream inputStream, long size, String contentType) {
+        checkOssEnabled();
+        OSS ossClient = null;
+        try {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(size);
+            metadata.setContentType(contentType == null || contentType.isBlank()
+                    ? "application/octet-stream" : contentType);
+            ossClient = getOssClient();
+            ossClient.putObject(new PutObjectRequest(ossProProperties.getBucketName(), objectKey, inputStream, metadata));
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.OSS_UPLOAD_FAILED, "上传后台生成文件失败: " + e.getMessage());
+        } finally {
+            closeOssClient(ossClient);
+        }
+    }
+
+    @Override
+    public ObjectMetadata getObjectMetadata(String path) {
+        checkOssEnabled();
+        OSS ossClient = null;
+        try {
+            ossClient = getOssClient();
+            return ossClient.getObjectMetadata(ossProProperties.getBucketName(), path);
+        } finally {
+            closeOssClient(ossClient);
+        }
+    }
+
+    @Override
+    public InputStream getFileRange(String path, long start, long end) {
+        checkOssEnabled();
+        if (start < 0 || end < start) {
+            throw new IllegalArgumentException("无效的对象读取范围");
+        }
+        OSS ossClient = getOssClient();
+        try {
+            GetObjectRequest request = new GetObjectRequest(ossProProperties.getBucketName(), path);
+            request.setRange(start, end);
+            OSSObject object = ossClient.getObject(request);
+            return new OssManagedInputStream(object.getObjectContent(), ossClient);
+        } catch (RuntimeException e) {
+            closeOssClient(ossClient);
+            throw e;
+        }
+    }
+
+    private static final class OssManagedInputStream extends FilterInputStream {
+        private final OSS ossClient;
+        private boolean closed;
+
+        private OssManagedInputStream(InputStream inputStream, OSS ossClient) {
+            super(inputStream);
+            this.ossClient = ossClient;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closed) return;
+            closed = true;
+            try {
+                super.close();
+            } finally {
+                ossClient.shutdown();
+            }
+        }
     }
 
     /**

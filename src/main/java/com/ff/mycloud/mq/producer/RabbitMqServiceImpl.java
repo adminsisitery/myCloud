@@ -111,4 +111,10 @@ public class RabbitMqServiceImpl implements RabbitMqService {
     public void UsageChanged(UsageMessage usageMessage) {
         rabbitTemplate.convertAndSend(CommonConstants.USAGE.USAGE_EXCHANGE,CommonConstants.USAGE.USAGE_KEY,usageMessage);
     }
+
+    @Override
+    public void sendFolderDownloadTask(String taskId) {
+        rabbitTemplate.convertAndSend(CommonConstants.FolderDownloadMQ.EXCHANGE,
+                CommonConstants.FolderDownloadMQ.KEY, taskId);
+    }
 }

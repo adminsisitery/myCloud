@@ -71,5 +71,15 @@ public class AIProperties {
         private String model;
         /** 是否为默认模型 */
         private boolean isDefault;
+        /** 定价配置（单位：元/1M tokens） */
+        private Pricing pricing = new Pricing();
+    }
+
+    @Data
+    public static class Pricing {
+        /** input 价格（元/百万 tokens） */
+        private double inputPrice = 1.0;
+        /** output 价格（元/百万 tokens） */
+        private double outputPrice = 2.0;
     }
 }

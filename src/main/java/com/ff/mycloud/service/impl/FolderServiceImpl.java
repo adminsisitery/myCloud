@@ -1,9 +1,5 @@
 package com.ff.mycloud.service.impl;
 
-import com.aliyun.oss.OSS;
-import com.aliyun.oss.OSSClient;
-import com.aliyun.oss.model.GetObjectRequest;
-import com.aliyun.oss.model.OSSObject;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.FileTypeUtil;
@@ -13,21 +9,25 @@ import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.service.FileInfoMapperService;
 import com.ff.mycloud.service.FolderService;
+import com.ff.mycloud.service.StorageService;
+import com.ff.mycloud.service.StorageServiceFactory;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongConsumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -47,14 +47,14 @@ public class FolderServiceImpl implements FolderService {
 
     FileInfoMapperService fileInfoMapperService;
     FileMapper fileMapper;
-    OssStorageServiceImpl ossStorageServiceImpl;
+    StorageServiceFactory storageServiceFactory;
 
     public FolderServiceImpl(FileInfoMapperService fileInfoMapperService,
                              FileMapper fileMapper,
-                             OssStorageServiceImpl ossStorageServiceImpl) {
+                             StorageServiceFactory storageServiceFactory) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
-        this.ossStorageServiceImpl = ossStorageServiceImpl;
+        this.storageServiceFactory = storageServiceFactory;
     }
 
     /**
@@ -89,15 +89,15 @@ public class FolderServiceImpl implements FolderService {
         if (fileInfoMapperService.existsFolder(parentId,folderName,currentUserId)) {
             return Result.error(500,"同级文件夹重名");
         }
-        String localFilePath="";
-        if (parentId!=null){
-            //有父类目录的情况下获得父目录的localpath
-            FileInfo byId = fileInfoMapperService.getById(parentId);
-            if (byId!=null){
-                //如果为不空那就是在上层文件夹
-                localFilePath= byId.getLocalFilePath();
+        String localFilePath;
+        if (parentId == null || parentId == 0) {
+            localFilePath = folderName + "/";
+        } else {
+            FileInfo parent = fileInfoMapperService.findByIdAndUserId(parentId, currentUserId);
+            if (parent == null || !Boolean.TRUE.equals(parent.getIsFolder())) {
+                return Result.error(404, "父文件夹不存在或无权访问");
             }
-            localFilePath = localFilePath+folderName+"/";
+            localFilePath = normalizeDirectory(parent.getLocalFilePath()) + folderName + "/";
         }
 
         //创建文件夹
@@ -120,100 +120,160 @@ public class FolderServiceImpl implements FolderService {
      */
     @Override
     public void downLoadFolder(long fileId, HttpServletResponse response) {
-        //检验fileId 用户 文件夹 是否删除
-        FileInfo fileInfo = fileInfoMapperService.getById(fileId);
-        Long currentUserId = UserContext.getCurrentUserId();
-        String localFilePath = fileInfo.getLocalFilePath();
-        //路径标准化
-        if(localFilePath.endsWith("/")){
-            localFilePath = localFilePath.substring(0,localFilePath.length()-1);
-        }
-        List<FileInfo> subTree = fileInfoMapperService.getSubTree(localFilePath, currentUserId);
-        log.info("飞飞飞："+localFilePath+"|*|"+currentUserId+"|||"+subTree);
-        //下载打包到ZIP
-            ZipOutputStream zop = null;
+        writeFolderZip(fileId, UserContext.getCurrentUserId(), response);
+    }
 
-        // ========== 极简重命名逻辑（适配你的get方法） ==========
-        Map<String, FileInfo> uniqueFileMap = new HashMap<>();
-        for (FileInfo info : subTree) {
-            if (info.getIsFolder()) {continue;} // 跳过文件夹
+    @Override
+    public void downLoadSharedFolder(long fileId, Long ownerUserId, HttpServletResponse response) {
+        if (ownerUserId == null) throw new BusinessException(ErrorCode.NO_PERMISSION);
+        writeFolderZip(fileId, ownerUserId, response);
+    }
 
-            String originalPath = info.getLocalFilePath();
-            String finalPath = originalPath;
-            int count = 1;
-
-            // 重复则加 (数字) 后缀
-            while (uniqueFileMap.containsKey(finalPath)) {
-                // 直接用你的get方法获取文件名和后缀
-                String pureName = info.getFilename(); // 新建 文本文档
-                String suffix = info.getFileSuffix(); // txt
-
-                // 拆分目录（只拆一次，复用你的完整路径）
-                int lastSlash = originalPath.lastIndexOf("/");
-                String dir = lastSlash > 0 ? originalPath.substring(0, lastSlash + 1) : "";
-
-                // 拼接新路径：目录 + 纯文件名(数字) + .后缀（无后缀则不加）
-                if (suffix.isEmpty()) {
-                    finalPath = dir + pureName + "(" + count + ")";
-                } else {
-                    finalPath = dir + pureName + "(" + count + ")." + suffix;
-                }
-                count++;
-                log.warn("重复文件重命名：{} → {}", originalPath, finalPath);
-            }
-            uniqueFileMap.put(finalPath, info);
-        }
-
-
-        try {
-            // 设置响应头和内容类型
-            response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
-            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            String filename = fileInfo.getFilename();
-            // 处理ZIP文件名：去掉已有的.zip后缀避免重复
-            if (!filename.endsWith(".zip")){
-                int lastDotIndex = filename.lastIndexOf(".");
-                // 只有当找到点，且点不在第一位时才截取
-                if (lastDotIndex > 0) {
-                    filename = filename.substring(0, lastDotIndex);
-                }
-            }
-            // 处理中文文件名乱码（兼容不同浏览器）
-            String fileName = URLEncoder.encode(filename + ".zip", StandardCharsets.UTF_8)
-                    .replaceAll("\\+", "%20");
-            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
-            // 禁用缓存、设置ZIP编码
-            response.setHeader("Cache-Control", "no-cache");
-            response.setHeader("Pragma", "no-cache");
-            response.setHeader("Content-Encoding", "zip");
-
-
-            OutputStream outputStream = response.getOutputStream();
-            zop = new ZipOutputStream(outputStream);
-            zop.setLevel(5);
-        for (Map.Entry<String, FileInfo> entry : uniqueFileMap.entrySet()) {
-            String zipPath = entry.getKey(); // 用重命名后的路径（核心修复！）
-            FileInfo info = entry.getValue();
-            if (info.getIsFolder()){
-                continue;
-            }
-
-            ZipEntry zipEntry = new ZipEntry(zipPath);
-            zop.putNextEntry(zipEntry);
-
-            // 从OSS下载文件内容并写入ZIP
-            String path = info.getPath();
-            byte[] files = ossStorageServiceImpl.downloadFile(path);
-            if (files!=null&&files.length>0){
-                zop.write(files);
-                zop.flush();
-            }
-            zop.closeEntry();
-        }
-        zop.finish();
-        outputStream.flush();
+    private void writeFolderZip(long fileId, Long ownerUserId, HttpServletResponse response) {
+        FileInfo root = requireFolder(fileId, ownerUserId);
+        prepareZipResponse(response, root.getFilename());
+        try (OutputStream output = response.getOutputStream()) {
+            writeArchive(root, ownerUserId, output, ignored -> {}, () -> false);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("文件夹下载失败: fileId={}, ownerUserId={}", fileId, ownerUserId, e);
+            throw new BusinessException(ErrorCode.FILE_DOWNLOAD_FAILED, "文件夹打包下载失败");
         }
+    }
+
+    @Override
+    public void writeFolderArchive(long fileId, Long ownerUserId, OutputStream output,
+                                   LongConsumer progressCallback, BooleanSupplier cancelled) {
+        FileInfo root = requireFolder(fileId, ownerUserId);
+        writeArchive(root, ownerUserId, output,
+                progressCallback == null ? ignored -> {} : progressCallback,
+                cancelled == null ? () -> false : cancelled);
+    }
+
+    private void writeArchive(FileInfo root, Long ownerUserId, OutputStream output,
+                              LongConsumer progressCallback, BooleanSupplier cancelled) {
+        String rootDirectory = normalizeDirectory(root.getLocalFilePath());
+        List<FileInfo> subtree = fileInfoMapperService.getSubTree(rootDirectory, ownerUserId);
+        subtree.sort(Comparator.comparing(info -> normalizePath(info.getLocalFilePath())));
+        StorageService storage = storageServiceFactory.getStorageService();
+        Set<String> usedEntries = new HashSet<>();
+        String zipRoot = safeSegment(root.getFilename()) + "/";
+        byte[] buffer = new byte[64 * 1024];
+        try (ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
+            zip.setLevel(5);
+            addDirectoryEntry(zip, zipRoot, usedEntries);
+            for (FileInfo info : subtree) {
+                if (cancelled.getAsBoolean()) throw new CancellationException("文件夹下载任务已取消");
+                if (info.getId() != null && info.getId().equals(root.getId())) continue;
+                String relativePath = toRelativePath(rootDirectory, info);
+                String entryName = uniqueEntryName(zipRoot + relativePath,
+                        Boolean.TRUE.equals(info.getIsFolder()), usedEntries);
+                if (Boolean.TRUE.equals(info.getIsFolder())) {
+                    addDirectoryEntry(zip, entryName, usedEntries);
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(entryName));
+                try (InputStream input = storage.getFile(info.getPath())) {
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        if (cancelled.getAsBoolean()) throw new CancellationException("文件夹下载任务已取消");
+                        if (read == 0) continue;
+                        zip.write(buffer, 0, read);
+                        progressCallback.accept(read);
+                    }
+                } finally {
+                    zip.closeEntry();
+                }
+            }
+            zip.finish();
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.FILE_DOWNLOAD_FAILED, "文件夹打包失败: " + e.getMessage());
+        }
+    }
+
+    private FileInfo requireFolder(long fileId, Long ownerUserId) {
+        FileInfo root = fileInfoMapperService.findByIdAndUserId(fileId, ownerUserId);
+        if (root == null || Boolean.TRUE.equals(root.getIsDeleted())) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        if (!Boolean.TRUE.equals(root.getIsFolder())) {
+            throw new BusinessException(ErrorCode.CANNOT_DOWNLOAD_FOLDER, "目标不是文件夹");
+        }
+        return root;
+    }
+
+    private void prepareZipResponse(HttpServletResponse response, String folderName) {
+        String filename = folderName == null || folderName.isBlank() ? "folder" : folderName;
+        if (filename.toLowerCase().endsWith(".zip")) filename = filename.substring(0, filename.length() - 4);
+        response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", ContentDisposition.attachment()
+                .filename(filename + ".zip", StandardCharsets.UTF_8).build().toString());
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+    }
+
+    private void addDirectoryEntry(ZipOutputStream zip, String path, Set<String> used) throws IOException {
+        String directory = path.endsWith("/") ? path : path + "/";
+        if (used.add(directory)) {
+            zip.putNextEntry(new ZipEntry(directory));
+            zip.closeEntry();
+        }
+    }
+
+    private String toRelativePath(String rootDirectory, FileInfo info) {
+        String fullPath = normalizePath(info.getLocalFilePath());
+        String relative = fullPath.startsWith(rootDirectory) ? fullPath.substring(rootDirectory.length()) : "";
+        if (relative.isBlank()) {
+            relative = displayName(info);
+        }
+        relative = relative.replace("../", "").replace("..\\", "");
+        if (Boolean.TRUE.equals(info.getIsFolder()) && !relative.endsWith("/")) relative += "/";
+        return relative;
+    }
+
+    private String uniqueEntryName(String requested, boolean directory, Set<String> used) {
+        String normalized = requested.replace('\\', '/');
+        if (directory && !normalized.endsWith("/")) normalized += "/";
+        if (!used.contains(normalized)) {
+            if (!directory) used.add(normalized);
+            return normalized;
+        }
+        String noSlash = directory ? normalized.substring(0, normalized.length() - 1) : normalized;
+        int slash = noSlash.lastIndexOf('/');
+        String dir = slash >= 0 ? noSlash.substring(0, slash + 1) : "";
+        String name = slash >= 0 ? noSlash.substring(slash + 1) : noSlash;
+        int dot = directory ? -1 : name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String suffix = dot > 0 ? name.substring(dot) : "";
+        int index = 1;
+        String candidate;
+        do {
+            candidate = dir + base + "(" + index++ + ")" + suffix + (directory ? "/" : "");
+        } while (used.contains(candidate));
+        if (!directory) used.add(candidate);
+        return candidate;
+    }
+
+    private String displayName(FileInfo info) {
+        String name = info.getOriginalFilename();
+        if (name == null || name.isBlank()) name = info.getFilename();
+        if (name == null || name.isBlank()) name = "unnamed-" + info.getId();
+        return safeSegment(name);
+    }
+
+    private String safeSegment(String value) {
+        if (value == null || value.isBlank()) return "folder";
+        return value.replace('/', '_').replace('\\', '_').replace("..", "_");
+    }
+
+    private String normalizeDirectory(String path) {
+        String normalized = normalizePath(path);
+        return normalized.endsWith("/") ? normalized : normalized + "/";
+    }
+
+    private String normalizePath(String path) {
+        if (path == null) return "";
+        String normalized = path.replace('\\', '/');
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
+        return normalized;
     }
 }

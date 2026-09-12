@@ -5,6 +5,7 @@ import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.ChunkTask;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
+import org.redisson.api.RLock;
 
 import org.springframework.stereotype.Component;
 
@@ -57,7 +58,9 @@ public class ChunkUploadRedis {
      * 标记分片已完成
      */
     public void markPartDone(String uploadId, int partNumber) {
-        redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress").set(partNumber, true);
+        var bitmap = redisClient.getBitSet(KEY_PREFIX + uploadId + ":progress");
+        bitmap.set(partNumber, true);
+        bitmap.expire(Duration.ofDays(TASK_TTL_DAYS));
     }
 
     /**
@@ -79,7 +82,17 @@ public class ChunkUploadRedis {
      */
     public void savePartETag(String uploadId, int partNumber, String eTag) {
         RBucket<String> bucket = redisClient.getBucket(KEY_PREFIX + uploadId + KEY_PARTS + partNumber);
-        bucket.set(eTag);
+        bucket.set(eTag, Duration.ofDays(TASK_TTL_DAYS));
+    }
+
+    /** 不同分片使用不同的锁，因此可以并行；同一分片的重试会被串行化。 */
+    public RLock getPartLock(String uploadId, int partNumber) {
+        return redisClient.getLock(KEY_PREFIX + uploadId + ":lock:part:" + partNumber);
+    }
+
+    /** 防止多个请求同时执行 complete/abort。 */
+    public RLock getTaskLock(String uploadId) {
+        return redisClient.getLock(KEY_PREFIX + uploadId + ":lock:task");
     }
 
     /**
@@ -126,7 +139,7 @@ public class ChunkUploadRedis {
     public List<String> scanAllTaskIds() {
         List<String> taskIds = new ArrayList<>();
         for (String key : redisClient.getKeys().getKeysByPattern(KEY_PREFIX + "*")) {
-            if (key.contains(":progress") || key.contains(KEY_PARTS)) {
+            if (key.contains(":progress") || key.contains(KEY_PARTS) || key.contains(":lock:")) {
                 continue;
             }
             taskIds.add(key.substring(KEY_PREFIX.length()));

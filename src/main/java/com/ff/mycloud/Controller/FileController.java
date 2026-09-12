@@ -8,14 +8,18 @@ import com.ff.mycloud.model.dto.MoveFileDTO;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
+import com.ff.mycloud.model.vo.FileDownloadVO;
+import com.ff.mycloud.common.util.HttpRange;
 import com.ff.mycloud.service.DeleteFileService;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.FileUploadTaskService;
+import com.ff.mycloud.service.StorageServiceFactory;
 import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -48,6 +53,7 @@ public class FileController {
     private final FileUploadTaskService fileUploadTaskService;
     private final FileSearchHandler fileSearchHandler;
     private final DeleteFileService deleteFileService;
+    private final StorageServiceFactory storageServiceFactory;
 
     /**
      * 构造器注入文件服务相关依赖
@@ -58,11 +64,13 @@ public class FileController {
      * @param deleteFileService     文件删除服务（回收站）
      */
     public FileController(FileService fileService, FileUploadTaskService fileUploadTaskService,
-                          FileSearchHandler fileSearchHandler, DeleteFileService deleteFileService) {
+                          FileSearchHandler fileSearchHandler, DeleteFileService deleteFileService,
+                          StorageServiceFactory storageServiceFactory) {
         this.fileService = fileService;
         this.fileUploadTaskService = fileUploadTaskService;
         this.fileSearchHandler = fileSearchHandler;
         this.deleteFileService = deleteFileService;
+        this.storageServiceFactory = storageServiceFactory;
     }
 
     /**
@@ -109,15 +117,48 @@ public class FileController {
      */
     @GetMapping("/{fileId}/content")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
-    public ResponseEntity<byte[]> downloadFile(@PathVariable long fileId) {
-        byte[] content = fileService.downloadFile(fileId);
+    public ResponseEntity<StreamingResponseBody> downloadFile(
+            @PathVariable long fileId,
+            @org.springframework.web.bind.annotation.RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
+        FileDownloadVO file = fileService.prepareDownload(fileId);
         HttpHeaders http = new HttpHeaders();
-        http.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        try {
+            http.setContentType(MediaType.parseMediaType(file.contentType()));
+        } catch (Exception ignored) {
+            http.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        }
         http.setContentDisposition(ContentDisposition.builder("attachment")
-                .filename(fileService.getFilename(fileId), StandardCharsets.UTF_8)
+                .filename(file.filename(), StandardCharsets.UTF_8)
                 .build());
-        http.setContentLength(content.length);
-        return ResponseEntity.ok().headers(http).body(content);
+        http.set(HttpHeaders.ACCEPT_RANGES, "bytes");
+
+        long start = 0;
+        long end = file.size() - 1;
+        HttpStatus status = HttpStatus.OK;
+        if (rangeHeader != null) {
+            try {
+                HttpRange range = HttpRange.parse(rangeHeader, file.size());
+                start = range.start();
+                end = range.end();
+                status = HttpStatus.PARTIAL_CONTENT;
+                http.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + file.size());
+            } catch (IllegalArgumentException e) {
+                http.set(HttpHeaders.CONTENT_RANGE, "bytes */" + file.size());
+                return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE).headers(http).build();
+            }
+        }
+        long contentLength = file.size() == 0 ? 0 : end - start + 1;
+        http.setContentLength(contentLength);
+        long rangeStart = start;
+        long rangeEnd = end;
+        StreamingResponseBody body = outputStream -> {
+            if (file.size() == 0) return;
+            try (var input = storageServiceFactory.getStorageService()
+                    .getFileRange(file.path(), rangeStart, rangeEnd)) {
+                input.transferTo(outputStream);
+            }
+        };
+        return ResponseEntity.status(status).headers(http).body(body);
     }
 
     /**

@@ -168,4 +168,24 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(logQueue())
                 .to(logTopicExchange()).with(CommonConstants.LogMQ.KEY);
     }
+
+    // ==================== 文件夹异步打包 ====================
+
+    @Bean
+    public TopicExchange folderDownloadExchange() {
+        return ExchangeBuilder.topicExchange(CommonConstants.FolderDownloadMQ.EXCHANGE)
+                .durable(true).build();
+    }
+
+    @Bean
+    public Queue folderDownloadQueue() {
+        return QueueBuilder.durable(CommonConstants.FolderDownloadMQ.QUEUE)
+                .withArguments(dlxArgs()).build();
+    }
+
+    @Bean
+    public Binding folderDownloadBinding() {
+        return BindingBuilder.bind(folderDownloadQueue())
+                .to(folderDownloadExchange()).with(CommonConstants.FolderDownloadMQ.KEY);
+    }
 }

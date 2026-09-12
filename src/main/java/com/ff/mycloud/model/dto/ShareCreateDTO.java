@@ -21,6 +21,7 @@ public class ShareCreateDTO {
     /** 要分享的文件ID，不能为空 */
     @NotNull(message = "文件ID不能为空")
     private Long fileId;
+
     /** 分享过期时间，不能为空且不能早于当前时间 */
     @NotNull(message = "过期时间不能为空")
     @FutureOrPresent(message = "过期时间不能早于当前时间")

@@ -28,6 +28,8 @@ public class ChunkTask {
     private String sha256Hash;
     /** 是否已预分配空间 */
     private Boolean spacePreAllocated;
+    /** OSS 分片是否已经合并；DB 入库失败重试时不再重复调用 completeMultipartUpload。 */
+    private Boolean storageCompleted;
     /** 创建时间戳（毫秒） */
     private Long createdAt;
     /** 最近一次活动时间戳（毫秒），每次上传分片时更新，用于超时判断 */

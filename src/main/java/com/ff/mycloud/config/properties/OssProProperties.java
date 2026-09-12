@@ -32,4 +32,18 @@ public class OssProProperties {
     private String cdnEndpoint;
     /** 是否启用 OSS 存储，默认关闭 */
     private Boolean enabled = false;
+
+    /** STS 临时凭证配置。roleArn 为空时直传接口不可用。 */
+    private Sts sts = new Sts();
+
+    @Data
+    public static class Sts {
+        private String regionId = "cn-hangzhou";
+        private String roleArn;
+        private String roleSessionName = "mycloud-upload";
+        private long durationSeconds = 900;
+        /** 凭证过期后额外保留的确认窗口。 */
+        private long confirmGraceSeconds = 900;
+        private int maxParallelParts = 6;
+    }
 }

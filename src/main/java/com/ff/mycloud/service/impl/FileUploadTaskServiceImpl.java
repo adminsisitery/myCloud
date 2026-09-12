@@ -75,7 +75,7 @@ public class FileUploadTaskServiceImpl implements FileUploadTaskService {
             return Result.error("用户不存在");
         }
 
-        // 校验用户可用空间是否足够
+        // 校验用户可用空间是否足够 预占空间
         if (!userCenterMapperService.reserveSpace(currentUserId, fileSize)) {
             upLoadProgressService.completeUploadTask(taskId, false, "用户可用空间不足");
             return Result.error("用户可用空间不足");

@@ -1,6 +1,7 @@
 package com.ff.mycloud.service;
 
 import com.aliyun.oss.model.PartETag;
+import com.aliyun.oss.model.ObjectMetadata;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -41,6 +42,9 @@ public interface StorageService {
      */
     String uploadFileWithProgressFromPath(File file, String uploadPath, String taskId, String originalFilename, long size, String fileType);
 
+    /** 以指定 objectKey 上传流，供后台生成物（如临时 ZIP）使用。 */
+    void uploadObject(String objectKey, InputStream inputStream, long size, String contentType);
+
     /**
      * 下载文件内容为字节数组
      *
@@ -63,6 +67,12 @@ public interface StorageService {
      * @return 文件输入流
      */
     InputStream getFile(String path);
+
+    /** 获取对象元数据，用于直传确认和流式下载。 */
+    ObjectMetadata getObjectMetadata(String path);
+
+    /** 获取闭区间 [start, end] 的对象流；关闭返回流时必须同时释放存储客户端。 */
+    InputStream getFileRange(String path, long start, long end);
 
     /**
      * 初始化OSS分片上传

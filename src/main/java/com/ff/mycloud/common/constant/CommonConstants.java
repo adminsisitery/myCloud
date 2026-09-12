@@ -93,6 +93,13 @@ public class CommonConstants {
         public static final String KEY = "operation_log";
     }
 
+    public static class FolderDownloadMQ {
+        public static final String EXCHANGE = "folder.download.topic";
+        public static final String QUEUE = "folder.download.queue";
+        public static final String KEY = "folder.download.create";
+        public static final String REDIS_PREFIX = "folder:download:";
+    }
+
 
     /**
      * 文件分片上传
@@ -131,4 +138,4 @@ public class CommonConstants {
         public static final String DLX_QUEUE = "dlx:queue";
         public static final String DLX_KEY = "dlx";
     }
-} 
+}

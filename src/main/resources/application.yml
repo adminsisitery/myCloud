@@ -111,6 +111,13 @@ oss:
   endpoint: oss-cn-hangzhou.aliyuncs.com
   cdn-endpoint: https://pre.feifei.ltd
   bucket-name: feifeioss
+  sts:
+    region-id: ${OSS_STS_REGION_ID:cn-hangzhou}
+    role-arn: ${OSS_STS_ROLE_ARN:}
+    role-session-name: mycloud-upload
+    duration-seconds: 900
+    confirm-grace-seconds: 900
+    max-parallel-parts: 6
 oauth:
   github:
     client-id:  Ov23liWWn2l1Q6nj4gHM # 必须填，不能空
@@ -138,11 +145,17 @@ ai:
       api-key: sk-580f9fb8e7e24922b85dd422c17133e7
       model: deepseek-chat
       default: true
+      pricing:
+        input-price: 1.0      # ¥1/百万 input tokens（缓存未命中）
+        output-price: 2.0     # ¥2/百万 output tokens
 
     - name: qwen-Flash
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       api-key: sk-ws-H.EIEXMPD.HfMB.MEYCIQCCQkwQWB2RwtoV6KWsqW7Lilqb5yX0yLi_ODhmF7BFdQIhAKTls9ikPHHh04lFiR66VvLI1yT6JJ3_aZY5MafGQlXU
       model: qwen-flash
+      pricing:
+        input-price: 0.5      # ¥0.5/百万 input tokens
+        output-price: 2.0     # ¥2/百万 output tokens
 
   tavily-api-key: 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
   # 通义 Embedding（独立于 chat）

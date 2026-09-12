@@ -10,7 +10,6 @@ import com.ff.mycloud.mq.producer.RabbitMqService;
 import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.repositorys.FileRecentAccess;
 import com.ff.mycloud.service.*;
-import dev.langchain4j.data.document.DocumentSplitter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +45,7 @@ class FileServiceImplTest {
     @Mock private FileObjectMapper fileObjectMapper;
     @Mock private FileRecentAccess fileRecentAccess;
     @Mock private UserContext userContext;
-    @Mock private DocumentSplitter documentSplitter;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private FileServiceImpl service;
     private MockedStatic<UserContext> userContextMock;
@@ -61,7 +60,7 @@ class FileServiceImplTest {
                 fileMapper, fileInfoMapperService,
                 userContext, userMapperServiceImpl,
                 upLoadProgressService, rabbitMqService,
-                fileObjectMapper, (HttpCodeStatusMapper) null, fileRecentAccess, (TransactionTemplate) documentSplitter
+                fileObjectMapper, (HttpCodeStatusMapper) null, fileRecentAccess, transactionTemplate
         );
         userContextMock = mockStatic(UserContext.class);
         userContextMock.when(UserContext::getCurrentUserId).thenReturn(USER_ID);

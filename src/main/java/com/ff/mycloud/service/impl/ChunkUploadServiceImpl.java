@@ -18,10 +18,13 @@ import com.ff.mycloud.repositorys.FileObjectMapper;
 import com.ff.mycloud.service.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.redisson.api.RLock;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class ChunkUploadServiceImpl implements ChunkUploadService {
@@ -55,6 +58,11 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         Long currentUserId = UserContext.getCurrentUserId();
         User currentUser = UserContext.getCurrentUser();
 
+        String validationError = validateInitRequest(chunkFile, currentUserId);
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+
         // 1. 原子预占空间
         if (!userCenterMapperService.reserveSpace(currentUserId, chunkFile.getFileSize())) {
             return Result.error("用户可用空间不足");
@@ -70,21 +78,34 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         String objectKey = uploadPath + "/" + UUID.randomUUID().toString().replace("-", "") + suffix;
 
         // 3. 初始化OSS分片上传
-        String ossUploadId = storageServiceFactory.getStorageService()
-                .initiateMultipartUpload(objectKey, chunkFile.getFileType());
+        String ossUploadId = null;
+        try {
+            ossUploadId = storageServiceFactory.getStorageService()
+                    .initiateMultipartUpload(objectKey, chunkFile.getFileType());
 
-        // 4. 生成自定义uploadId，组装ChunkTask写入Redis
-        String uploadId = UUID.randomUUID().toString().replace("-", "");
-        ChunkTask chunkTask = chunkUploadMapper.toChunkTask(chunkFile, uploadId);
-        chunkTask.setOssUploadId(ossUploadId);
-        chunkTask.setObjectKey(objectKey);
-        chunkTask.setUserId(currentUserId);
-        chunkTask.setSpacePreAllocated(true);
-        chunkTask.setCreatedAt(System.currentTimeMillis());
-        chunkTask.setLastActivityTime(System.currentTimeMillis());
-        chunkUploadRedis.saveTask(chunkTask);
-
-        return Result.success(new ChunkVO(uploadId, ossUploadId));
+            // 4. 生成自定义uploadId，组装ChunkTask写入Redis
+            String uploadId = UUID.randomUUID().toString().replace("-", "");
+            ChunkTask chunkTask = chunkUploadMapper.toChunkTask(chunkFile, uploadId);
+            chunkTask.setOssUploadId(ossUploadId);
+            chunkTask.setObjectKey(objectKey);
+            chunkTask.setUserId(currentUserId);
+            chunkTask.setSpacePreAllocated(true);
+            chunkTask.setStorageCompleted(false);
+            chunkTask.setCreatedAt(System.currentTimeMillis());
+            chunkTask.setLastActivityTime(System.currentTimeMillis());
+            chunkUploadRedis.saveTask(chunkTask);
+            return Result.success(new ChunkVO(uploadId, ossUploadId));
+        } catch (RuntimeException e) {
+            if (ossUploadId != null) {
+                try {
+                    storageServiceFactory.getStorageService().cancelUpload(ossUploadId, objectKey);
+                } catch (Exception ignored) {
+                    // 原始异常更有诊断价值，超时清理仍可兜底 OSS 残片。
+                }
+            }
+            userCenterMapperService.releaseSpace(currentUserId, chunkFile.getFileSize());
+            throw e;
+        }
     }
 
     @Override
@@ -95,14 +116,34 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             return Result.error("uploadId不存在或已过期");
         }
 
-        // 2. 幂等判断：分片已完成则跳过
-        if (chunkUploadRedis.isPartUploaded(uploadId, partNumber)) {
-            return Result.error("分片" + partNumber + "已上传，请勿重复上传");
+        if (!task.getUserId().equals(UserContext.getCurrentUserId())) {
+            return Result.error("无权访问此上传任务");
+        }
+        if (partNumber == null || partNumber < 1 || partNumber > task.getTotalParts()) {
+            return Result.error("分片序号超出范围");
+        }
+        if (chunk == null || chunk.isEmpty()) {
+            return Result.error("分片内容不能为空");
         }
 
-        // 3. 上传分片到 OSS
-        StorageService storageService = storageServiceFactory.getStorageService();
+        RLock lock = chunkUploadRedis.getPartLock(uploadId, partNumber);
+        boolean locked = false;
         try {
+            locked = lock.tryLock(5, 2, TimeUnit.MINUTES);
+            if (!locked) return Result.error("分片正在上传，请稍后重试");
+
+            // 锁内二次判断，同一分片重复请求直接返回成功（幂等）。
+            if (chunkUploadRedis.isPartUploaded(uploadId, partNumber)) {
+                return Result.success(completedPart(uploadId, partNumber));
+            }
+            long expectedMax = partNumber.equals(task.getTotalParts())
+                    ? task.getFileSize() - (long) task.getChunkSize() * (task.getTotalParts() - 1)
+                    : task.getChunkSize();
+            if (chunk.getSize() > task.getChunkSize() || (partNumber.equals(task.getTotalParts()) && chunk.getSize() > expectedMax)) {
+                return Result.error("分片大小与初始化参数不一致");
+            }
+
+            StorageService storageService = storageServiceFactory.getStorageService();
             String eTag = storageService.uploadPart(
                     task.getObjectKey(),
                     task.getOssUploadId(),
@@ -116,22 +157,40 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             task.setLastActivityTime(System.currentTimeMillis());
             chunkUploadRedis.saveTask(task);
 
-            ChunkPartVO vo = new ChunkPartVO();
-            vo.setUploadId(uploadId);
-            vo.setPartNumber(partNumber);
-            vo.setCompleted(true);
-            return Result.success(vo);
-        } catch (IOException e) {
+            return Result.success(completedPart(uploadId, partNumber));
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             return Result.error("分片上传失败: " + e.getMessage());
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) lock.unlock();
         }
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Result<ChunkCompleteVO> completeChunk(String uploadId) {
+        RLock lock = chunkUploadRedis.getTaskLock(uploadId);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(5, 2, TimeUnit.MINUTES);
+            if (!locked) return Result.error("任务正在合并，请稍后查询");
+            return doCompleteChunk(uploadId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Result.error("合并请求被中断");
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) lock.unlock();
+        }
+    }
+
+    protected Result<ChunkCompleteVO> doCompleteChunk(String uploadId) {
         // 1. 取出上传任务
         ChunkTask task = chunkUploadRedis.getTask(uploadId);
         if (task == null) {
             return Result.error("uploadId不存在或已过期");
+        }
+        if (!task.getUserId().equals(UserContext.getCurrentUserId())) {
+            return Result.error("无权访问此上传任务");
         }
 
         // 2. 从位图找出缺失的分片号
@@ -146,11 +205,17 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
 
         // 4. 调用 OSS 合并分片
         StorageService storageService = storageServiceFactory.getStorageService();
-        String objectKey = storageService.completeChunk(
-                task.getObjectKey(),
-                task.getOssUploadId(),
-                partETags
-        );
+        String objectKey = task.getObjectKey();
+        if (!Boolean.TRUE.equals(task.getStorageCompleted())) {
+            objectKey = storageService.completeChunk(
+                    task.getObjectKey(),
+                    task.getOssUploadId(),
+                    partETags
+            );
+            task.setStorageCompleted(true);
+            task.setLastActivityTime(System.currentTimeMillis());
+            chunkUploadRedis.saveTask(task);
+        }
 
         // 5. 解析文件名和后缀
         String originalFilename = task.getFileName();
@@ -165,7 +230,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 6. 计算 localFilePath
         String localFilePath = "";
         if (task.getParentId() != null && task.getParentId() != 0) {
-            FileInfo parent = fileInfoMapperService.getById(task.getParentId());
+            FileInfo parent = fileInfoMapperService.findByIdAndUserId(task.getParentId(), task.getUserId());
             if (parent != null) {
                 localFilePath = parent.getLocalFilePath() + originalFilename;
             }
@@ -198,6 +263,9 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         if (task == null) {
             return Result.error("uploadId不存在或已过期");
         }
+        if (!task.getUserId().equals(UserContext.getCurrentUserId())) {
+            return Result.error("无权访问此上传任务");
+        }
 
         // 2. 从位图找出缺失和已完成的分片号
         List<Integer> missing = chunkUploadRedis.getMissingParts(uploadId, task.getTotalParts());
@@ -214,14 +282,36 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
 
     @Override
     public Result<String> cancelUpload(String uploadId) {
+        RLock lock = chunkUploadRedis.getTaskLock(uploadId);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(5, 1, TimeUnit.MINUTES);
+            if (!locked) return Result.error("任务正在处理，请稍后重试");
+            return doCancelUpload(uploadId);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Result.error("取消请求被中断");
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) lock.unlock();
+        }
+    }
+
+    private Result<String> doCancelUpload(String uploadId) {
         ChunkTask task = chunkUploadRedis.getTask(uploadId);
         if (task == null) {
             return Result.error("uploadId不存在或已过期");
         }
+        if (!task.getUserId().equals(UserContext.getCurrentUserId())) {
+            return Result.error("无权访问此上传任务");
+        }
 
         // 1. 取消 OSS 分片上传
         StorageService storageService = storageServiceFactory.getStorageService();
-        storageService.cancelUpload(task.getOssUploadId(), task.getObjectKey());
+        if (Boolean.TRUE.equals(task.getStorageCompleted())) {
+            storageService.deleteFile(task.getObjectKey());
+        } else {
+            storageService.cancelUpload(task.getOssUploadId(), task.getObjectKey());
+        }
 
         // 2. 归还预占空间
         userCenterMapperService.releaseSpace(task.getUserId(), task.getFileSize());
@@ -230,5 +320,25 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         chunkUploadRedis.deleteTask(uploadId);
 
         return Result.success("已取消");
+    }
+
+    private ChunkPartVO completedPart(String uploadId, Integer partNumber) {
+        ChunkPartVO vo = new ChunkPartVO();
+        vo.setUploadId(uploadId);
+        vo.setPartNumber(partNumber);
+        vo.setCompleted(true);
+        return vo;
+    }
+
+    private String validateInitRequest(ChunkFile request, Long userId) {
+        if (request == null || request.getFileName() == null || request.getFileName().isBlank()) return "文件名不能为空";
+        if (request.getFileSize() == null || request.getFileSize() <= 0) return "文件大小必须大于0";
+        if (request.getTotalParts() == null || request.getTotalParts() < 1 || request.getTotalParts() > 10000) return "分片数量必须在1到10000之间";
+        if (request.getChunkSize() == null || request.getChunkSize() < 100 * 1024) return "分片大小不能小于100KB";
+        long expectedParts = (request.getFileSize() + request.getChunkSize() - 1) / request.getChunkSize();
+        if (expectedParts != request.getTotalParts()) return "分片数量与文件大小不匹配";
+        if (request.getParentId() != null && request.getParentId() != 0
+                && !fileInfoMapperService.existsParentId(request.getParentId(), userId)) return "目标文件夹不存在或无权访问";
+        return null;
     }
 }

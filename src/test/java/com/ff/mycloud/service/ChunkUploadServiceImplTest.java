@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
+import org.redisson.api.RLock;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
@@ -55,6 +56,7 @@ class ChunkUploadServiceImplTest {
     @Mock private FileInfoMapperService fileInfoMapperService;
     @Mock private FileMapper fileMapper;
     @Mock private FileObjectMapper fileObjectMapper;
+    @Mock private RLock uploadLock;
 
     private ChunkUploadServiceImpl service;
     private MockedStatic<UserContext> userContextMock;
@@ -66,7 +68,7 @@ class ChunkUploadServiceImplTest {
     private static final String TEST_OBJECT_KEY = "user_1/abc123def456.txt";
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws InterruptedException {
         MockitoAnnotations.openMocks(this);
         service = new ChunkUploadServiceImpl(
                 userCenterMapperService,
@@ -87,6 +89,10 @@ class ChunkUploadServiceImplTest {
 
         // 默认 storageService 就绪
         when(storageServiceFactory.getStorageService()).thenReturn(storageService);
+        when(chunkUploadRedis.getPartLock(anyString(), anyInt())).thenReturn(uploadLock);
+        when(chunkUploadRedis.getTaskLock(anyString())).thenReturn(uploadLock);
+        when(uploadLock.tryLock(anyLong(), anyLong(), any(java.util.concurrent.TimeUnit.class))).thenReturn(true);
+        when(uploadLock.isHeldByCurrentThread()).thenReturn(true);
     }
 
     @AfterEach
@@ -244,7 +250,7 @@ class ChunkUploadServiceImplTest {
     }
 
     @Test
-    @DisplayName("uploadPart: 重复上传已完成分片 → 返回 error")
+    @DisplayName("uploadPart: 重复上传已完成分片 → 幂等返回成功")
     void uploadPart_shouldRejectDuplicate() {
         ChunkTask task = buildChunkTask();
         when(chunkUploadRedis.getTask(TEST_UPLOAD_ID)).thenReturn(task);
@@ -252,8 +258,8 @@ class ChunkUploadServiceImplTest {
 
         Result<ChunkPartVO> result = service.uploadPart(TEST_UPLOAD_ID, 1, mockChunk("x".getBytes()));
 
-        assertNotEquals(CommonConstants.StatusCode.SUCCESS, result.getCode().intValue());
-        assertTrue(result.getMessage().contains("已上传") || result.getMessage().contains("重复"));
+        assertEquals(CommonConstants.StatusCode.SUCCESS, result.getCode().intValue());
+        assertTrue(result.getData().getCompleted());
         verify(storageService, never()).uploadPart(anyString(), anyString(), anyInt(), any(), anyLong());
     }
 
@@ -462,7 +468,7 @@ class ChunkUploadServiceImplTest {
     private ChunkFile buildChunkFile() {
         ChunkFile f = new ChunkFile();
         f.setFileName("test-file.txt");
-        f.setFileSize(1024L * 1024 * 600); // 600MB
+        f.setFileSize(10L * 1024 * 1024);
         f.setFileType("text/plain");
         f.setParentId(0L);
         f.setTotalParts(2);
@@ -478,7 +484,7 @@ class ChunkUploadServiceImplTest {
         t.setObjectKey(TEST_OBJECT_KEY);
         t.setUserId(USER_ID);
         t.setFileName("test-file.txt");
-        t.setFileSize(1024L * 1024 * 600);
+        t.setFileSize(10L * 1024 * 1024);
         t.setTotalParts(2);
         t.setChunkSize(5 * 1024 * 1024);
         t.setFileType("text/plain");
