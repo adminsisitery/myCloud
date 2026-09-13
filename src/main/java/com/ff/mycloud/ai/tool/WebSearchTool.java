@@ -34,7 +34,7 @@ public class WebSearchTool {
             return "搜索次数已达上限，请直接基于已有信息回答用户。";
         }
 
-        log.info("[Tool] webSearch query={}", query);
+        log.debug("[Tool] webSearch queryLength={}", query == null ? 0 : query.length());
 
         try {
             List<? extends WebSearchOrganicResult> results = engine.search(query).results();
@@ -55,7 +55,7 @@ public class WebSearchTool {
 
             return sb.toString();
         } catch (Exception e) {
-            log.error("[Tool] webSearch error: {}", e.getMessage());
+            log.error("[Tool] webSearch failed", e);
             return "搜索失败：" + e.getMessage();
         }
     }

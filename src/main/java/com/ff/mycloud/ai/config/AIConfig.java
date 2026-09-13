@@ -147,7 +147,7 @@ public class AIConfig {
             public void onError(ChatModelErrorContext errorContext) {
                 String model = errorContext.chatRequest().modelName();
                 meterRegistry.counter("ai.chat.errors", "model", model).increment();
-                log.error("AI error: model={}, message={}", model, errorContext.error().getMessage());
+                log.error("AI模型调用失败: model={}", model, errorContext.error());
             }
         };
     }

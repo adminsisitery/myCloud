@@ -158,7 +158,7 @@ public class ShareController {
 
         // 如果令牌有效，直接通过令牌访问分享
         if (token!=null&&shareServiceImpl.validateShareToken(shareCode,token)){
-            log.debug("Valid token found for share code: {}", shareCode);
+            log.debug("分享访问凭证校验通过");
             try{
                 ShareFileVO shareFileVO = shareServiceImpl.accessShareByToken(shareCode, token);
                 return Result.success(shareFileVO);
@@ -223,7 +223,7 @@ public class ShareController {
     private String extractShareTokenFromCookies(String shareCode, HttpServletRequest request) {
 
         if (shareCode == null||request==null) {
-            log.warn("Invalid parameters: shareCode={}, request={}", shareCode, request);
+            log.warn("分享访问参数无效");
             return null;
         }
 

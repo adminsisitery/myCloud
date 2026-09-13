@@ -106,6 +106,7 @@ public class FolderServiceImpl implements FolderService {
         fileInfoMapperService.save(fileInfoFromFolder);
 //        //在ES里创建文件夹
 //        fileSearchService.save(fileInfoFromFolder.getId(),fileInfoFromFolder.getFilename(),UserContext.getCurrentUserId());
+        log.info("文件夹创建完成: userId={}, folderId={}, parentId={}", currentUserId, fileInfoFromFolder.getId(), parentId);
         return Result.success("创建成功");
     }
 

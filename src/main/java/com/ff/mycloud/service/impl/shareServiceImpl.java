@@ -103,6 +103,7 @@ public class shareServiceImpl implements shareService {
 
         // 删除token
         shareTokenRedis.deleteToken(shareCode);
+        log.info("取消分享完成: userId={}, shareId={}", currentUserId, id);
     }
 
     /**
@@ -144,6 +145,7 @@ public class shareServiceImpl implements shareService {
         //添加到延迟队列redis
         addToDelayedQueue(shareRecord.getId(),expireTime);
 
+        log.info("创建分享完成: userId={}, fileId={}, shareId={}", fileInfo.getUserId(), fileId, shareRecord.getId());
         return shareMapper.toShareFileVO(shareRecord,fileInfo.getFilename(),fileInfo.getFileSize(),fileId, fileInfo.getIsFolder());
     }
 
@@ -339,7 +341,7 @@ public class shareServiceImpl implements shareService {
      * @throws BusinessException 当任何校验不通过时抛出对应异常
      */
     public byte[] downloadSharedFile(String shareCode, String token) {
-        log.debug("downloadSharedFile shareCode={}, token={}", shareCode, token);
+        log.debug("开始校验分享下载权限");
 
         ShareRecord shareRecord = shareRecordMapperService.findByShareCode(shareCode);
         if (shareRecord == null) {
@@ -352,7 +354,7 @@ public class shareServiceImpl implements shareService {
         }
 
         String password = shareRecord.getPassword();
-        log.debug("password='{}'", password);
+        log.debug("分享下载是否需要提取码: required={}", password != null && !password.isEmpty());
         if (password != null && !password.trim().isEmpty()) {
 
             if (!validateShareToken(shareCode, token)) {

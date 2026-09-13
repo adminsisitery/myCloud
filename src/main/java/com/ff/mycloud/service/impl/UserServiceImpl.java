@@ -84,7 +84,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public String login(LoginDTO loginDTO) {
-        logger.info("开始处理登录请求，用户名：{}", loginDTO.getUsername());
+        logger.debug("开始处理登录请求");
 
         String ip = IpUtil.getClientIp();
 
@@ -101,7 +101,7 @@ public class UserServiceImpl implements UserService {
 
         // ③ 用户名不存在：已用 -1 计入 IP 维度，不暴露用户是否存在
         if (!users.isPresent()) {
-            logger.warn("登录失败：用户名不存在，用户名：{}", loginDTO.getUsername());
+            logger.warn("登录失败: reason=user_not_found");
             ExceptionUtil.throwBizException(USER_NOT_FOUND);
         }
         User user = users.get();
@@ -109,13 +109,13 @@ public class UserServiceImpl implements UserService {
         // ④ 验证密码：失败时用真实 userId 取代 -1 再记一次 用户存在的情况
         if (!PasswordUtil.matches(loginDTO.getPassword(), user.getPassword())) {
             loginFailRedis.recordAndCheck(user.getId(), ip); // 覆盖 -1 的计数
-            logger.warn("登录失败：密码错误，用户名：{}", loginDTO.getUsername());
+            logger.warn("登录失败: reason=invalid_password, userId={}", user.getId());
             ExceptionUtil.throwBizException(INVALID_PASSWORD);
         }
 
         // ⑤ 验证状态
         if (user.getStatus() != 1) {
-            logger.warn("登录失败：账号已被禁用，用户名：{}", loginDTO.getUsername());
+            logger.warn("登录失败: reason=account_disabled, userId={}", user.getId());
             ExceptionUtil.throwBizException(ACCOUNT_DISABLED);
         }
 
@@ -125,7 +125,7 @@ public class UserServiceImpl implements UserService {
         // 签发token并登录
         StpUtil.login(user.getId());
         String token = StpUtil.getTokenValue();
-        logger.info("登录成功，用户名：{}，token：{} id{}", loginDTO.getUsername(), token, UserContext.getCurrentUserId());
+        logger.info("登录成功: userId={}", user.getId());
         return token;
     }
 
@@ -152,7 +152,7 @@ public class UserServiceImpl implements UserService {
         //验证码验证
         String verificationCode = verificationCodeRedis.getVerificationCode(registerDTO.getEmail());
         if (!verificationCode.equals(registerDTO.getCode())) {
-            logger.warn("验证码不正确{}", registerDTO.getCode());
+            logger.warn("注册验证码校验失败");
             ExceptionUtil.throwBizException(VERIFICATION_CODE_ERROR);
         }
 
@@ -175,6 +175,7 @@ public class UserServiceImpl implements UserService {
 
         //为用户绑定角色
         addRole(user.getId(), CommonConstants.UserRole.USER_ID);
+        logger.info("注册成功: userId={}", user.getId());
     }
 
     /**
@@ -188,7 +189,7 @@ public class UserServiceImpl implements UserService {
         //检查邮箱是否注册
         Optional<User> userByEmail = userMapperService.findByEmail(email);
         if (userByEmail.isPresent()) {
-            logger.warn("邮箱已被注册{}", email);
+            logger.warn("验证码发送拒绝: reason=email_exists");
             ExceptionUtil.throwBizException(EMAIL_EXISTS);
         }
 
@@ -198,13 +199,14 @@ public class UserServiceImpl implements UserService {
 
         //发送验证码
         boolean success = EmailUtil.sendVerificationCode(email, code);
-        System.out.println(code);
         if (!success) {
+            logger.error("注册验证码邮件发送失败");
             ExceptionUtil.throwBizException(ErrorCode.EMAIL_SEND_ERROR);
         }
 
         //保存到redis
         verificationCodeRedis.saveVerificationCode(email, code);
+        logger.info("注册验证码发送完成");
     }
 
     /**
@@ -214,7 +216,9 @@ public class UserServiceImpl implements UserService {
     @Override
     public void logout() {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN);
+        Long userId = UserContext.getCurrentUserId();
         StpUtil.logout();
+        logger.info("登出成功: userId={}", userId);
     }
 
     /**
@@ -228,6 +232,7 @@ public class UserServiceImpl implements UserService {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN, "操作者未登录");
         // 强制指定用户下线
         StpUtil.logout(userId);
+        logger.info("强制下线完成: targetUserId={}", userId);
     }
 
     /**
@@ -239,6 +244,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void addRole(Long userId, Long roleId) {
         userMapperService.SetUserRole(userId,roleId);
+        logger.info("添加角色完成: userId={}, roleId={}", userId, roleId);
     }
 
     /**
@@ -249,5 +255,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public void changeUserRole(UserRole userRole) {
         userMapperService.updataUserRole(userRole);
+        logger.info("用户角色修改完成");
     }
 }

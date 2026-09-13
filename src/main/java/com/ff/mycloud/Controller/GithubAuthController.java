@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import lombok.extern.slf4j.Slf4j;
 import cn.dev33.satoken.stp.StpUtil;
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.util.UserContext;
@@ -40,6 +41,7 @@ import java.time.LocalDateTime;
  */
 @RestController
 @RequestMapping("/api/auth/github")
+@Slf4j
 public class GithubAuthController {
 
     private final AuthRequest githubAuthRequest;
@@ -110,6 +112,7 @@ public class GithubAuthController {
         AuthUser authUser = authResponse.getData();
 
         if (authUser == null) {
+            log.warn("GitHub授权登录失败");
             // 授权失败，跳回登录页
             response.sendRedirect("http://localhost:5173/login");
             return;
@@ -149,6 +152,7 @@ public class GithubAuthController {
         // 生成 Sa-Token 并登录
         StpUtil.login(byGithubId.getId());
         String tokenValue = StpUtil.getTokenValue();
+        log.info("GitHub登录完成: userId={}", byGithubId.getId());
 
         // 重定向前端 oauth-success 页面，携带 token
         response.sendRedirect(

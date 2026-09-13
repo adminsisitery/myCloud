@@ -1,5 +1,6 @@
 package com.ff.mycloud.Controller;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.model.entity.ChunkFile;
@@ -11,8 +12,10 @@ import com.ff.mycloud.service.ChunkUploadService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+
 @RestController
 @RequestMapping("/api/chunk")
+@Slf4j
 public class BigFileController {
 
     private final ChunkUploadService chunkUploadService;
@@ -31,6 +34,8 @@ public class BigFileController {
     @PostMapping("/init")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
     public Result<ChunkVO> init(@RequestBody ChunkFile chunkFile) {
+        log.info("初始化分片请求: fileSize={}, totalParts={}, parentId={}",
+                chunkFile.getFileSize(), chunkFile.getTotalParts(), chunkFile.getParentId());
         return chunkUploadService.initUpload(chunkFile);
     }
 
@@ -47,6 +52,7 @@ public class BigFileController {
     public Result<ChunkPartVO> upload(@RequestParam("uploadId") String uploadId,
                                        @RequestParam("partNumber") Integer partNumber,
                                        @RequestParam("chunk") MultipartFile chunk) {
+        log.debug("分片上传中，上传分片：uploadId:{},partNumber:{}", uploadId,partNumber);
         return chunkUploadService.uploadPart(uploadId, partNumber, chunk);
     }
 
@@ -59,6 +65,7 @@ public class BigFileController {
     @PostMapping("/complete")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<ChunkCompleteVO> complete(@RequestParam("uploadId") String uploadId) {
+        log.info("合并分片uploadId:{}", uploadId);
         return chunkUploadService.completeChunk(uploadId);
     }
 
@@ -71,6 +78,7 @@ public class BigFileController {
     @GetMapping("/progress/{uploadId}")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 10.0, timeout = 500)
     public Result<ChunkProgressVO> progress(@PathVariable("uploadId") String uploadId) {
+        log.debug("查询分片进度uploadId:{}", uploadId);
         return chunkUploadService.getMissingList(uploadId);
     }
 
@@ -83,6 +91,7 @@ public class BigFileController {
     @DeleteMapping("/cancel/{uploadId}")
     @RateLimit(dimensions = {RateLimit.Dimension.USER}, permitsPerSecond = 5.0, timeout = 500)
     public Result<String> cancel(@PathVariable("uploadId") String uploadId) {
+        log.info("请求取消分片任务: uploadId={}", uploadId);
         return chunkUploadService.cancelUpload(uploadId);
     }
 }

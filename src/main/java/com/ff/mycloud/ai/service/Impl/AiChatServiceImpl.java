@@ -1,5 +1,6 @@
 package com.ff.mycloud.ai.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ff.mycloud.ES.FileSearchRepository;
 import com.ff.mycloud.ai.ContentRetrievers.ESAndPgContentRetriever;
@@ -51,6 +52,7 @@ import java.util.Map;
 import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey;
 
 @Service
+@Slf4j
 public class AiChatServiceImpl implements AiChatService {
 
     private final AiConversationMapper conversationMapper;
@@ -149,12 +151,14 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         final Long finalConversationId = conversationId;
+        log.info("AI对话开始: userId={}, conversationId={}, model={}", userId, finalConversationId, modelName);
         final boolean isFirstMessage = conv.getCount() == null || conv.getCount() == 0;
 
         // ===== 新会话首条消息：检查 AI 响应缓存 =====
         if (isFirstMessage) {
             String cached = aiCacheService.get(userId, userMessage, modelName);
             if (cached != null) {
+                log.debug("AI响应缓存命中: userId={}, conversationId={}", userId, finalConversationId);
                 // 缓存命中，直接模拟流式返回
                 SseEmitter hitEmitter = new SseEmitter(60_000L);
                 new Thread(() -> {
@@ -179,6 +183,7 @@ public class AiChatServiceImpl implements AiChatService {
                         cachedMsg.setContent(cached);
                         aiMessageMapper.insert(cachedMsg);
                     } catch (Exception e) {
+                        log.warn("AI缓存响应发送失败: userId={}, conversationId={}", userId, finalConversationId, e);
                         hitEmitter.completeWithError(e);
                     }
                 }).start();
@@ -229,9 +234,9 @@ public class AiChatServiceImpl implements AiChatService {
 
         // ===== SseEmitter =====
         SseEmitter emitter = new SseEmitter(120_000L);
-        emitter.onCompletion(() -> System.out.println("SSE连接正常关闭"));
-        emitter.onError(ex -> System.out.println("SSE异常: " + ex.getMessage()));
-        emitter.onTimeout(() -> System.out.println("SSE超时"));
+        emitter.onCompletion(() -> log.debug("SSE连接关闭: userId={}, conversationId={}", userId, finalConversationId));
+        emitter.onError(ex -> log.warn("SSE连接异常: userId={}, conversationId={}", userId, finalConversationId, ex));
+        emitter.onTimeout(() -> log.warn("SSE连接超时: userId={}, conversationId={}", userId, finalConversationId));
 
         // ===== 计时开始 =====
         final long startTime = System.currentTimeMillis();
@@ -302,7 +307,7 @@ public class AiChatServiceImpl implements AiChatService {
                     aiUsageLogMapper.insert(usageLog);
                 } catch (Exception logEx) {
                     // 日志写入失败不影响主流程
-                    System.err.println("Token usage log insert failed: " + logEx.getMessage());
+                    log.error("AI用量记录写入失败: userId={}, conversationId={}, model={}", userId, finalConversationId, modelName, logEx);
                 }
 
                 String doneData = objectMapper.writeValueAsString(Map.of(
@@ -315,6 +320,8 @@ public class AiChatServiceImpl implements AiChatService {
                                 "totalTokens", totalTokens
                         )
                 ));
+                log.info("AI对话生成完成: userId={}, conversationId={}, model={}, inputTokens={}, outputTokens={}, elapsedMs={}",
+                        userId, finalConversationId, modelName, in, out, System.currentTimeMillis() - startTime);
                 emitter.send(SseEmitter.event().name("done").data(doneData));
                 emitter.complete();
             } catch (Exception e) {
@@ -323,6 +330,7 @@ public class AiChatServiceImpl implements AiChatService {
         });
 
         tokenStream.onError(throwable -> {
+            log.error("AI对话生成失败: userId={}, conversationId={}, model={}", userId, finalConversationId, modelName, throwable);
             try {
                 String errorData = objectMapper.writeValueAsString(Map.of(
                         "error", throwable.getMessage() != null

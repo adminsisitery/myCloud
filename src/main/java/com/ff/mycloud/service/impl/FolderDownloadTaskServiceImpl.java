@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
@@ -27,6 +28,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService {
     private static final long ARCHIVE_TTL_MS = TimeUnit.HOURS.toMillis(24);
     private static final int MAX_FILES = 20_000;
@@ -81,9 +83,11 @@ public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService 
         try {
             rabbitMqService.sendFolderDownloadTask(task.getTaskId());
         } catch (RuntimeException e) {
+            log.error("文件夹打包任务投递失败: taskId={}, userId={}, folderId={}", task.getTaskId(), userId, folderId, e);
             fail(task.getTaskId(), "MQ任务发送失败: " + e.getMessage());
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "创建文件夹下载任务失败");
         }
+        log.info("文件夹打包任务创建完成: taskId={}, userId={}, folderId={}, totalBytes={}", task.getTaskId(), userId, folderId, totalBytes);
         return toVO(task);
     }
 
@@ -144,6 +148,7 @@ public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService 
                 current.setUpdatedAt(System.currentTimeMillis());
             });
 
+            log.info("文件夹打包开始: taskId={}, userId={}, folderId={}", taskId, task.getUserId(), task.getFolderId());
             temp = Files.createTempFile("mycloud-folder-" + taskId + "-", ".zip");
             long[] processed = {0};
             long[] lastSaved = {0};
@@ -181,7 +186,9 @@ public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService 
                 current.setExpiresAt(expiresAt);
                 current.setUpdatedAt(System.currentTimeMillis());
             });
+            log.info("文件夹打包完成: taskId={}, userId={}, processedBytes={}", taskId, task.getUserId(), processed[0]);
         } catch (CancellationException e) {
+            log.info("文件夹打包取消: taskId={}", taskId);
             if (objectKey != null) safeDeleteObject(objectKey);
             redis.update(taskId, current -> {
                 current.setStatus(FolderDownloadStatus.CANCELLED);
@@ -190,12 +197,15 @@ public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService 
                 current.setUpdatedAt(System.currentTimeMillis());
             });
         } catch (Exception e) {
+            log.error("文件夹打包失败: taskId={}", taskId, e);
             if (objectKey != null) safeDeleteObject(objectKey);
             fail(taskId, "打包失败: " + e.getMessage());
             throw new RuntimeException("文件夹异步打包失败: " + taskId, e);
         } finally {
             if (temp != null) {
-                try { Files.deleteIfExists(temp); } catch (Exception ignored) { }
+                try { Files.deleteIfExists(temp); } catch (Exception e) {
+                    log.warn("删除打包临时文件失败: taskId={}, path={}", taskId, temp, e);
+                }
             }
             if (locked && lock.isHeldByCurrentThread()) lock.unlock();
         }
@@ -268,7 +278,9 @@ public class FolderDownloadTaskServiceImpl implements FolderDownloadTaskService 
 
     private void safeDeleteObject(String objectKey) {
         if (objectKey == null) return;
-        try { storageFactory.getStorageService().deleteFile(objectKey); } catch (Exception ignored) { }
+        try { storageFactory.getStorageService().deleteFile(objectKey); } catch (Exception e) {
+            log.warn("删除临时压缩包失败: objectKey={}", objectKey, e);
+        }
     }
 
     private boolean terminal(FolderDownloadStatus status) {

@@ -103,8 +103,10 @@ public class FileUploadTaskServiceImpl implements FileUploadTaskService {
                     taskId,
                     currentUserId
             );
+            log.info("异步上传任务已提交: taskId={}, userId={}, fileSize={}", taskId, currentUserId, fileSize);
             return Result.success(taskId);
         } catch (IOException | RuntimeException e) {
+            log.error("异步上传提交失败: taskId={}, userId={}, fileSize={}", taskId, currentUserId, fileSize, e);
             // 上传提交失败：回滚空间并清理临时文件
             releaseSpaceOnce(taskId, currentUserId, fileSize);
             upLoadProgressService.completeUploadTask(taskId, false, failureMessage("上传任务提交失败", e));

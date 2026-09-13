@@ -55,7 +55,7 @@ public class WsService {
 
     @OnError
     public void onError(Session session, Throwable e) {
-        log.error("WebSocket 异常 - sessionId={}", session.getId(), e);
+        log.error("WebSocket 异常 - sessionId={}", session == null ? null : session.getId(), e);
     }
 
     // ==================== 发送消息 ====================
@@ -118,7 +118,8 @@ public class WsService {
     private void tryClose(Session session) {
         try {
             session.close();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("WebSocket关闭失败: sessionId={}", session.getId(), e);
         }
     }
 }

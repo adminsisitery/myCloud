@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import static cn.dev33.satoken.SaManager.log;
 
 /**
  * 全局异常处理器，统一拦截Controller层抛出的异常并返回标准化的Result响应。
@@ -38,8 +37,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NotLoginException.class)
     public ResponseEntity<Result<Void>> handleNotLoginException(NotLoginException e) {
-        logger.error("Sa-Token未登录异常：{}，异常类型：{}", e.getMessage(), e.getType());
-        logger.error("Authentication error: {}", e.getMessage());
+        logger.warn("身份验证失败: type={}", e.getType());
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(Result.error(401, "未登录或token无效"));
@@ -55,8 +53,11 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<Void>> handleBusinessException(BusinessException e) {
-        logger.error("Business error: code={}, message={}", 
-                e.getCode(), e.getMessage());
+        if (mapErrorCodeToHttpStatus(e.getCode()).is5xxServerError()) {
+            logger.error("业务处理异常: code={}", e.getCode(), e);
+        } else {
+            logger.warn("业务请求拒绝: code={}", e.getCode());
+        }
         
         // 根据错误码映射到合适的HTTP状态码
         HttpStatus httpStatus = mapErrorCodeToHttpStatus(e.getCode());
@@ -75,7 +76,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Result<Void>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
-        logger.error("File upload error: file size exceeded the maximum allowed size", e);
+        logger.warn("上传请求超过允许大小: maxBytes={}", e.getMaxUploadSize());
         return ResponseEntity
                 .status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(Result.error(ErrorCode.FILE_TOO_LARGE.getHttpStatus(), ErrorCode.FILE_TOO_LARGE.getMessage()));
@@ -102,6 +103,7 @@ public class GlobalExceptionHandler {
         // 获取第一个错误信息
         FieldError fieldError = e.getBindingResult().getFieldErrors().get(0);
         String message = fieldError.getDefaultMessage();
+        logger.warn("参数校验失败: field={}, errorCount={}", fieldError.getField(), e.getBindingResult().getErrorCount());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Result.error(CommonConstants.StatusCode.BAD_REQUEST, message));
@@ -115,6 +117,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Result<Void>> handleConstraintViolation(ConstraintViolationException e) {
+        logger.warn("方法参数校验失败: violationCount={}", e.getConstraintViolations().size());
         // 取第一条错误信息
         String message = e.getConstraintViolations().iterator().next().getMessage();
         return ResponseEntity

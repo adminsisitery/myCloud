@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.exceotion.BusinessException;
 import com.ff.mycloud.common.util.IpUtil;
 import com.ff.mycloud.common.util.UserContext;
@@ -22,9 +23,9 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-import static cn.dev33.satoken.SaManager.log;
 
 @Service
+@Slf4j
 public class deleteFileServiceImpl implements DeleteFileService {
 
     private final FileInfoMapperService fileInfoMapperService;

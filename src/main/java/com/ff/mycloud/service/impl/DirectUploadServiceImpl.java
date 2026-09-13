@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.aliyun.oss.model.ObjectMetadata;
 import com.aliyuncs.DefaultAcsClient;
 import com.aliyuncs.profile.DefaultProfile;
@@ -36,6 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class DirectUploadServiceImpl implements DirectUploadService {
     private final OssProProperties oss;
     private final DirectUploadRedis redis;
@@ -89,6 +91,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
             task.setCreatedAt(now);
             task.setExpiresAt(now + (oss.getSts().getDurationSeconds() + oss.getSts().getConfirmGraceSeconds()) * 1000);
             redis.save(task);
+            log.info("直传任务创建成功: userId={}, taskId={}, fileSize={}", userId, taskId, task.getFileSize());
 
             Map<String, String> requiredHeaders = new LinkedHashMap<>();
             requiredHeaders.put("Content-Type", task.getFileType());
@@ -98,6 +101,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
                     normalizeEndpoint(oss.getEndpoint()), oss.getBucketName(), objectKey,
                     oss.getSts().getMaxParallelParts(), requiredHeaders);
         } catch (RuntimeException e) {
+            log.error("直传初始化失败，开始释放预占空间: userId={}, taskId={}", userId, taskId, e);
             userCenterService.releaseSpace(userId, request.getFileSize());
             redis.delete(taskId);
             throw e;
@@ -131,6 +135,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
             if (fileInfo == null) throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "保存文件元数据失败");
             redis.delete(taskId);
             String suffix = suffixWithoutDot(task.getFileName());
+            log.info("直传确认完成: userId={}, taskId={}, fileId={}, fileSize={}", task.getUserId(), taskId, fileInfo.getId(), task.getFileSize());
             return new ChunkCompleteVO(fileInfo.getId(), task.getFileName(), task.getFileSize(), task.getObjectKey(), suffix);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -148,6 +153,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
             locked = lock.tryLock(5, 1, TimeUnit.MINUTES);
             if (!locked) throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "直传任务正在处理");
             cleanup(requireOwnedTask(taskId));
+            log.info("直传任务取消完成: taskId={}", taskId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "取消直传被中断");
@@ -166,7 +172,10 @@ public class DirectUploadServiceImpl implements DirectUploadService {
                 if (lock.tryLock()) {
                     try {
                         task = redis.get(taskId);
-                        if (task != null && task.getExpiresAt() < now) cleanup(task);
+                        if (task != null && task.getExpiresAt() < now) {
+                            cleanup(task);
+                            log.info("直传超时任务清理完成: taskId={}, userId={}", taskId, task.getUserId());
+                        }
                     } finally {
                         lock.unlock();
                     }
@@ -209,6 +218,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
             request.setPolicy(buildPolicy(objectKey));
             return client.getAcsResponse(request).getCredentials();
         } catch (Exception e) {
+            log.error("获取STS临时凭证失败: userId={}, taskId={}", userId, taskId, e);
             throw new BusinessException(ErrorCode.OSS_UPLOAD_FAILED, "获取STS临时凭证失败: " + e.getMessage());
         } finally {
             client.shutdown();

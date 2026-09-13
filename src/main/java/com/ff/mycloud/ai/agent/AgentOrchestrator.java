@@ -154,8 +154,8 @@ public class AgentOrchestrator {
 
         // ===== SseEmitter =====
         SseEmitter emitter = new SseEmitter(300_000L); // Agent 步骤多，给5分钟
-        emitter.onCompletion(() -> log.info("Agent SSE 正常关闭, conv={}", finalConvId));
-        emitter.onError(ex -> log.error("Agent SSE 异常, conv={}: {}", finalConvId, ex.getMessage()));
+        emitter.onCompletion(() -> log.debug("Agent SSE 关闭: conversationId={}", finalConvId));
+        emitter.onError(ex -> log.warn("Agent SSE 异常: conversationId={}", finalConvId, ex));
         emitter.onTimeout(() -> log.warn("Agent SSE 超时, conv={}", finalConvId));
 
         // ===== Phase 1: PLAN (async in a thread to not block) =====
@@ -266,7 +266,7 @@ public class AgentOrchestrator {
                             .build();
                     aiUsageLogMapper.insert(usageLog);
                 } catch (Exception logEx) {
-                    log.warn("Agent usage log insert failed: {}", logEx.getMessage());
+                    log.error("Agent用量记录写入失败: userId={}, conversationId={}", userId, finalConvId, logEx);
                 }
 
                 // ---- done ----
@@ -281,11 +281,13 @@ public class AgentOrchestrator {
                                 "totalTokens", totalTokens
                         )
                 ));
+                log.info("Agent执行完成: userId={}, conversationId={}, model={}, totalTokens={}, toolCalls={}, elapsedMs={}",
+                        userId, finalConvId, modelName, totalTokens, totalToolCalls, System.currentTimeMillis() - startTime);
                 emitter.send(SseEmitter.event().name("done").data(doneData));
                 emitter.complete();
 
             } catch (Exception e) {
-                log.error("Agent 执行失败", e);
+                log.error("Agent执行失败: userId={}, conversationId={}, model={}", userId, finalConvId, modelName, e);
                 try {
                     String errorData = objectMapper.writeValueAsString(
                             Map.of("error", e.getMessage() != null ? e.getMessage() : "Agent error"));
@@ -321,7 +323,7 @@ public class AgentOrchestrator {
                     plan.setSteps(plan.getSteps().subList(0, MAX_PLAN_STEPS));
                 }
             }
-            log.info("[Agent] Plan 生成成功: goal={}, steps={}", plan.getGoal(), plan.getSteps().size());
+            log.debug("[Agent] 计划生成完成: steps={}", plan.getSteps().size());
             return plan;
         } catch (Exception e) {
             log.warn("[Agent] Plan 解析失败，使用降级方案: {}", e.getMessage());

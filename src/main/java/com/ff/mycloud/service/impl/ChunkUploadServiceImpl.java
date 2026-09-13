@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.aliyun.oss.model.PartETag;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.result.Result;
@@ -26,7 +27,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+
 @Service
+@Slf4j
 public class ChunkUploadServiceImpl implements ChunkUploadService {
 
     private final UserCenterMapperService userCenterMapperService;
@@ -65,6 +68,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
 
         // 1. 原子预占空间
         if (!userCenterMapperService.reserveSpace(currentUserId, chunkFile.getFileSize())) {
+            log.warn("分片任务空间不足: userId={}, fileSize={}", currentUserId, chunkFile.getFileSize());
             return Result.error("用户可用空间不足");
         }
 
@@ -94,15 +98,20 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             chunkTask.setCreatedAt(System.currentTimeMillis());
             chunkTask.setLastActivityTime(System.currentTimeMillis());
             chunkUploadRedis.saveTask(chunkTask);
+            log.info("分片任务创建成功: userId={}, uploadId={}, fileSize={}, totalParts={}",
+                    currentUserId, uploadId, chunkFile.getFileSize(), chunkFile.getTotalParts());
             return Result.success(new ChunkVO(uploadId, ossUploadId));
         } catch (RuntimeException e) {
+            log.error("分片任务初始化失败: userId={}, objectKey={}", currentUserId, objectKey, e);
             if (ossUploadId != null) {
                 try {
+                    log.info("取消初始化失败的OSS上传: userId={}, objectKey={}", currentUserId, objectKey);
                     storageServiceFactory.getStorageService().cancelUpload(ossUploadId, objectKey);
                 } catch (Exception ignored) {
-                    // 原始异常更有诊断价值，超时清理仍可兜底 OSS 残片。
+                    log.warn("清理初始化残片失败: userId={}, objectKey={}", currentUserId, objectKey, ignored);
                 }
             }
+            log.info("释放分片初始化预占空间: userId={}, fileSize={}", currentUserId, chunkFile.getFileSize());
             userCenterMapperService.releaseSpace(currentUserId, chunkFile.getFileSize());
             throw e;
         }
@@ -113,16 +122,20 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 1. 从 Redis 取出上传任务
         ChunkTask task = chunkUploadRedis.getTask(uploadId);
         if (task == null) {
+            log.warn("分片上传中：分片任务不存在：uploadId：{},PartNumber:{}", uploadId, partNumber);
             return Result.error("uploadId不存在或已过期");
         }
 
         if (!task.getUserId().equals(UserContext.getCurrentUserId())) {
+            log.warn("分片上传中：文件无权限：uploadId；{},partNumber:{}", uploadId, partNumber);
             return Result.error("无权访问此上传任务");
         }
         if (partNumber == null || partNumber < 1 || partNumber > task.getTotalParts()) {
+            log.warn("分片上传中：分片序号超出范围uploadId；{},partNumber:{}", uploadId, partNumber);
             return Result.error("分片序号超出范围");
         }
         if (chunk == null || chunk.isEmpty()) {
+            log.warn("分片上传中：分片内容不能为空：uploadId：{},partNumber:{}", uploadId, partNumber);
             return Result.error("分片内容不能为空");
         }
 
@@ -130,16 +143,20 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         boolean locked = false;
         try {
             locked = lock.tryLock(5, 2, TimeUnit.MINUTES);
-            if (!locked) return Result.error("分片正在上传，请稍后重试");
-
+            if (!locked) {
+                log.debug("分片已经在上传中：uploadId:{},partNumber:{}", uploadId, partNumber);
+                return Result.error("分片正在上传，请稍后重试");
+            }
             // 锁内二次判断，同一分片重复请求直接返回成功（幂等）。
             if (chunkUploadRedis.isPartUploaded(uploadId, partNumber)) {
+                log.debug("分片已经上传过了：uploadId:{},partNumber:{}", uploadId, partNumber);
                 return Result.success(completedPart(uploadId, partNumber));
             }
             long expectedMax = partNumber.equals(task.getTotalParts())
                     ? task.getFileSize() - (long) task.getChunkSize() * (task.getTotalParts() - 1)
                     : task.getChunkSize();
             if (chunk.getSize() > task.getChunkSize() || (partNumber.equals(task.getTotalParts()) && chunk.getSize() > expectedMax)) {
+                log.warn("分片大小与初始化参数不一致:UploadId:{},partNumber:{}", uploadId, partNumber);
                 return Result.error("分片大小与初始化参数不一致");
             }
 
@@ -156,10 +173,11 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             chunkUploadRedis.markPartDone(uploadId, partNumber);
             task.setLastActivityTime(System.currentTimeMillis());
             chunkUploadRedis.saveTask(task);
-
+            log.debug("分片上传成功：uploadId：{}，chunkNumber：{}", uploadId, partNumber);
             return Result.success(completedPart(uploadId, partNumber));
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            log.error("分片上传失败: uploadId={}, partNumber={}", uploadId, partNumber, e);
             return Result.error("分片上传失败: " + e.getMessage());
         } finally {
             if (locked && lock.isHeldByCurrentThread()) lock.unlock();
@@ -177,6 +195,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             return doCompleteChunk(uploadId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("分片合并请求中断: uploadId={}", uploadId);
             return Result.error("合并请求被中断");
         } finally {
             if (locked && lock.isHeldByCurrentThread()) lock.unlock();
@@ -196,6 +215,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 2. 从位图找出缺失的分片号
         List<Integer> missing = chunkUploadRedis.getMissingParts(uploadId, task.getTotalParts());
         if (!missing.isEmpty()) {
+            log.warn("合并缺少分片: uploadId={}, missingCount={}, totalParts={}", uploadId, missing.size(), task.getTotalParts());
             return Result.error("缺失分片号: " + missing
                     + "，已完成: " + (task.getTotalParts() - missing.size()) + " / " + task.getTotalParts());
         }
@@ -250,6 +270,8 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 8. 清理 Redis
         chunkUploadRedis.deleteTask(uploadId);
 
+        log.info("分片合并完成，等待事务提交: userId={}, uploadId={}, fileId={}, fileSize={}",
+                task.getUserId(), uploadId, fileInfo.getId(), task.getFileSize());
         // 9. 返回文件信息
         return Result.success(new ChunkCompleteVO(
                 fileInfo.getId(), originalFilename,
@@ -290,6 +312,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
             return doCancelUpload(uploadId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("分片取消请求中断: uploadId={}", uploadId);
             return Result.error("取消请求被中断");
         } finally {
             if (locked && lock.isHeldByCurrentThread()) lock.unlock();
@@ -319,6 +342,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         // 3. 清理 Redis
         chunkUploadRedis.deleteTask(uploadId);
 
+        log.info("分片任务取消完成: userId={}, uploadId={}, releasedBytes={}", task.getUserId(), uploadId, task.getFileSize());
         return Result.success("已取消");
     }
 

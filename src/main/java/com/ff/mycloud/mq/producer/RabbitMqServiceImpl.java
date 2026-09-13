@@ -1,5 +1,6 @@
 package com.ff.mycloud.mq.producer;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.constant.ESConstants;
 import com.ff.mycloud.model.entity.FileDocument;
@@ -21,6 +22,7 @@ import java.util.UUID;
  * @date 2026/3/14
  */
 @Service
+@Slf4j
 public class RabbitMqServiceImpl implements RabbitMqService {
 
     RabbitTemplate rabbitTemplate;
@@ -86,6 +88,7 @@ public class RabbitMqServiceImpl implements RabbitMqService {
         operationLog.setMsgId(UUID.randomUUID().toString());
         rabbitTemplate.convertAndSend(CommonConstants.LogMQ.EXCHANGE,
                 CommonConstants.LogMQ.KEY, operationLog);
+        log.debug("操作日志已提交发送: msgId={}, userId={}, fileId={}", operationLog.getMsgId(), operationLog.getUserId(), operationLog.getFileId());
     }
 
 
@@ -116,5 +119,6 @@ public class RabbitMqServiceImpl implements RabbitMqService {
     public void sendFolderDownloadTask(String taskId) {
         rabbitTemplate.convertAndSend(CommonConstants.FolderDownloadMQ.EXCHANGE,
                 CommonConstants.FolderDownloadMQ.KEY, taskId);
+        log.debug("文件夹打包消息已提交发送: taskId={}", taskId);
     }
 }

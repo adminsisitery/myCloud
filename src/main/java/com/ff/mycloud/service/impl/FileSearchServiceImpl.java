@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.ES.FileSearchRepository;
 import com.ff.mycloud.ai.model.entity.QueryData;
 import com.ff.mycloud.common.util.UserContext;
@@ -34,6 +35,7 @@ import java.util.Set;
  */
 @Service
 @ConditionalOnProperty(prefix = "file", name = "search", havingValue = "ES")
+@Slf4j
 public class FileSearchServiceImpl implements FileSearchService {
 
     FileSearchRepository fileSearchRepository;
@@ -226,5 +228,6 @@ public class FileSearchServiceImpl implements FileSearchService {
 
         // 批量写入 ES
         fileSearchRepository.saveAll(docs);
+        log.info("ES索引重建完成: documentCount={}", docs.size());
     }
 }

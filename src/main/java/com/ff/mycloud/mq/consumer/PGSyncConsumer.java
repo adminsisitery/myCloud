@@ -1,5 +1,6 @@
 package com.ff.mycloud.mq.consumer;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.PgSender;
 import dev.langchain4j.data.document.Document;
@@ -24,6 +25,7 @@ import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metad
  */
 @Component
 @ConditionalOnBean(EmbeddingStore.class)
+@Slf4j
 public class PGSyncConsumer {
 
     private final EmbeddingStore embeddingStore;
@@ -39,6 +41,7 @@ public class PGSyncConsumer {
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 5000))
     @RabbitListener(queues = CommonConstants.PG.INSERT_QUEUE)
     public void pgInsert(PgSender message) {
+        log.debug("消息消费开始: operation=pgInsert, businessId={}", message.getFileId());
         String text = message.getText();
         if (text == null || text.isBlank()) return;
 
@@ -55,6 +58,7 @@ public class PGSyncConsumer {
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 5000))
     @RabbitListener(queues = CommonConstants.PG.DELETE_QUEUE)
     public void pgDelete(PgSender message) {
+        log.debug("消息消费开始: operation=pgDelete, businessId={}", message.getFileId());
         embeddingStore.removeAll(
                 metadataKey("fileId").isEqualTo(String.valueOf(message.getFileId()))
         );

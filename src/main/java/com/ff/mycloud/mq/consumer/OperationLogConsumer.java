@@ -1,5 +1,6 @@
 package com.ff.mycloud.mq.consumer;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.OperationLog;
 import com.ff.mycloud.service.OperationLogMapperService;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component;
  * @date 2026/3/14
  */
 @Component
+@Slf4j
 public class OperationLogConsumer {
 
     private final OperationLogMapperService operationLogMapperService;
@@ -41,9 +43,12 @@ public class OperationLogConsumer {
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 3000))
     @RabbitListener(queues = CommonConstants.LogMQ.QUEUE)
     public void handleLog(OperationLog message) {
+        log.debug("消息消费开始: operation=handleLog, businessId={}", message.getMsgId());
         if (!messageDedupService.tryConsume(message.getMsgId())) {
+            log.debug("操作日志重复消息跳过: msgId={}", message.getMsgId());
             return;
         }
         operationLogMapperService.save(message);
+        log.debug("操作日志消费返回: msgId={}, userId={}, fileId={}", message.getMsgId(), message.getUserId(), message.getFileId());
     }
 }

@@ -1,6 +1,7 @@
 package com.ff.mycloud;
 
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.ai.config.AIProperties;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -37,6 +38,7 @@ import org.springframework.context.annotation.Bean;
 @EnableConfigurationProperties(AIProperties.class)
 @EnableCaching
 @EnableRetry
+@Slf4j
 public class MyCloudApplication {
 
     /**
@@ -53,10 +55,7 @@ public class MyCloudApplication {
      * 应用启动完成后打印完成信息
      */
     private static void finishInfoPrint() {
-        System.out.println();
-        System.out.println("-----------------------------------");
-        System.out.println("网盘后端启动完成!!");
-        System.out.println("-----------------------------------");
+        log.info("网盘后端启动完成");
     }
 
     /**

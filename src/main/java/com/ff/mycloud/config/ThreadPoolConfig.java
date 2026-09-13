@@ -53,6 +53,7 @@ public class ThreadPoolConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
         //初始化线程池
+        executor.setTaskDecorator(new com.ff.mycloud.common.logging.MdcTaskDecorator());
         executor.initialize();
 
         return executor;

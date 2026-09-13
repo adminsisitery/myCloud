@@ -1,5 +1,6 @@
 package com.ff.mycloud.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.common.util.PasswordUtil;
 import com.ff.mycloud.common.util.UserContext;
@@ -23,6 +24,7 @@ import java.util.Optional;
  */
 
 @Service
+@Slf4j
 public class UserCenterServiceImpl implements UserCenterService {
 
     UserCenterMapperService userCenterMapperService;
@@ -68,6 +70,7 @@ public class UserCenterServiceImpl implements UserCenterService {
         String encode = PasswordUtil.encode(newPassword);
         user.setPassword(encode);
         userMapperService.updateById(user);
+        log.info("密码修改成功: userId={}", UserContext.getCurrentUserId());
         return Result.success("修改成功");
     }
 }

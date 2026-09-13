@@ -119,6 +119,7 @@ public class FileServiceImpl implements FileService {
             if (!existingFiles.isEmpty()){
                 FileInfo existingFile = existingFiles.get(0);
                 FileInfo newFileInfo = handleFastUpload(file.getOriginalFilename(), file.getSize(), existingFile, sha256Hash, parentId, null, currentUser);
+                log.info("秒传完成: userId={}, fileId={}, fileSize={}", currentUser.getId(), newFileInfo.getId(), file.getSize());
                 return newFileInfo.getPath();
             }
 
@@ -147,6 +148,9 @@ public class FileServiceImpl implements FileService {
                     fileInfoMapperService.save(fi);
                     return fi;
                 });
+                if (fileInfo != null) {
+                    log.info("普通上传完成: userId={}, fileId={}, fileSize={}", currentUser.getId(), fileInfo.getId(), file.getSize());
+                }
                 return fileInfo != null ? fileInfo.getPath() : null;
             } catch (Exception e) {
                 // DB 保存失败，删掉已上传的 OSS 文件作为补偿
@@ -154,7 +158,7 @@ public class FileServiceImpl implements FileService {
                 try {
                     storageService.deleteFile(filePath);
                 } catch (Exception ignored) {
-                    log.warn("Failed to delete orphan OSS file: {}", filePath);
+                    log.warn("Failed to delete orphan OSS file: {}", filePath, ignored);
                 }
                 throw e;
             }
@@ -327,7 +331,7 @@ public class FileServiceImpl implements FileService {
             try {
                 storageService.deleteFile(path);
             } catch (Exception ignored) {
-                log.warn("Failed to delete orphan OSS file: {}", path);
+                log.warn("Failed to delete orphan OSS file: {}", path, ignored);
             }
             upLoadProgressService.completeUploadTask(taskId, false,
                     "文件信息保存失败: " + (e.getMessage() != null ? e.getMessage() : "未知错误"));
@@ -620,6 +624,7 @@ public class FileServiceImpl implements FileService {
         sendOpLog(OperationLog.OP_RENAME, fileId,
                 fd.getFileName(), fileInfo.getFileSize(),
                 "原文件名:" + fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+        log.info("文件重命名完成: fileId={}, userId={}", fileId, fileInfo.getUserId());
     }
 
     /**

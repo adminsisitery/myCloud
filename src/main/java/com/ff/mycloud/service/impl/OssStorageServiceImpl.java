@@ -81,7 +81,7 @@ public class OssStorageServiceImpl implements StorageService {
                     file.getInputStream(), metadata);
             ossClient.putObject(putObjectRequest);
         } catch (Exception e) {
-            logger.error("Failed to upload file to OSS: bucket={}, objectName={}, error={}", ossProProperties.getBucketName(), objectName, e.getMessage());
+            logger.error("OSS上传失败: bucket={}, objectKey={}", ossProProperties.getBucketName(), objectName, e);
             ExceptionUtil.throwBizException(ErrorCode.OSS_UPLOAD_FAILED, e.getMessage());
             return null; // 不会执行到这里，为了编译通过
         } finally {
@@ -142,8 +142,7 @@ public class OssStorageServiceImpl implements StorageService {
                 return objectName;
 
             } catch (Exception e) {
-                logger.error("Failed to upload file to OSS with progress tracking: bucket={}, objectName={}, error={}",
-                        ossProProperties.getBucketName(), objectName, e.getMessage());
+                logger.error("OSS进度上传失败: taskId={}, objectKey={}", taskId, objectName, e);
                 upLoadProgressService.completeUploadTask(taskId, false, "OSS上传失败: " + e.getMessage());
                 ExceptionUtil.throwBizException(ErrorCode.OSS_UPLOAD_FAILED, "OSS上传失败: " + e.getMessage());
                 return null; // 不会执行到这里，为了编译通过
@@ -169,6 +168,7 @@ public class OssStorageServiceImpl implements StorageService {
         try (InputStream inputStream = getFile(filePath)) {
             return inputStream.readAllBytes();
         } catch (IOException e) {
+            logger.error("OSS下载读取失败: objectKey={}", filePath, e);
             throw new RuntimeException(e);
         }
     }
@@ -185,7 +185,9 @@ public class OssStorageServiceImpl implements StorageService {
     try {
         ossClient = getOssClient();
         ossClient.deleteObject(ossProProperties.getBucketName(), path);
+        logger.debug("OSS对象删除完成: objectKey={}", path);
     } catch (Exception e) {
+        logger.error("OSS对象删除失败: objectKey={}", path, e);
         ExceptionUtil.throwBizException(ErrorCode.OSS_DELETE_FAILED, e.getMessage());
     } finally {
         closeOssClient(ossClient);
@@ -207,6 +209,7 @@ public class OssStorageServiceImpl implements StorageService {
             OSSObject object = ossClient.getObject(new GetObjectRequest(ossProProperties.getBucketName(), path));
             return new OssManagedInputStream(object.getObjectContent(), ossClient);
         } catch (RuntimeException e) {
+            logger.error("OSS对象读取失败: objectKey={}", path, e);
             closeOssClient(ossClient);
             throw e;
         }
@@ -224,6 +227,7 @@ public class OssStorageServiceImpl implements StorageService {
             ossClient = getOssClient();
             ossClient.putObject(new PutObjectRequest(ossProProperties.getBucketName(), objectKey, inputStream, metadata));
         } catch (Exception e) {
+            logger.error("OSS后台文件上传失败: objectKey={}, fileSize={}", objectKey, size, e);
             throw new BusinessException(ErrorCode.OSS_UPLOAD_FAILED, "上传后台生成文件失败: " + e.getMessage());
         } finally {
             closeOssClient(ossClient);
@@ -255,6 +259,7 @@ public class OssStorageServiceImpl implements StorageService {
             OSSObject object = ossClient.getObject(request);
             return new OssManagedInputStream(object.getObjectContent(), ossClient);
         } catch (RuntimeException e) {
+            logger.error("OSS对象读取失败: objectKey={}", path, e);
             closeOssClient(ossClient);
             throw e;
         }
