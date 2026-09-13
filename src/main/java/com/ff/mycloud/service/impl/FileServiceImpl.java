@@ -309,7 +309,7 @@ public class FileServiceImpl implements FileService {
             fileDocument.setUserId(currentUserId);
             rabbitMqService.sendInsertMessage(fileDocument);
 
-            UserCenter byUserId = userCenterMapperService.getByUserId(UserContext.getCurrentUserId());
+            UserCenter byUserId = userCenterMapperService.getByUserId(currentUserId);
             long totalSpace = byUserId.getTotalSpace();
             long usedSpace = byUserId.getUsedSpace();
 
@@ -908,7 +908,7 @@ public class FileServiceImpl implements FileService {
         fileDocument.setFileType(newFileInfo.getFileType());
         fileDocument.setUserId(currentUser.getId());
         rabbitMqService.sendInsertMessage(fileDocument);
-        sendOpLog(OperationLog.OP_UPLOAD, newFileInfo.getId(),
+        sendOpLog(currentUser.getId(), OperationLog.OP_UPLOAD, newFileInfo.getId(),
                 resolvedFilename, newFileInfo.getFileSize(), "秒传");
         return newFileInfo;
     }

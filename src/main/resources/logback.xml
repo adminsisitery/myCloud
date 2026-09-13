@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan ="true" scanPeriod="60 seconds" debug="false">
-    <property name="LOG_PATH" value="${MYCLOUD_LOG_PATH:-${user.home}/logs/business}"/>
+
     <property name="LOG_HISTORY" value="30"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

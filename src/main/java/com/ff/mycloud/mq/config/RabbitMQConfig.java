@@ -17,9 +17,9 @@ import java.util.Map;
 
 /**
  * RabbitMQ 交换机、队列和绑定声明（统一入口）
- * <p>所有队列均配置 DLX 死信交换机，配合 application.yml 中
- * default-requeue-rejected=false，消费者抛异常后消息进入 DLQ，
- * 由运维人员通过管理面板查看和处理。</p>
+ * <p>ES、PG、操作日志历史队列通过 RabbitMQ policy 配置 DLX，避免与已存在队列的参数冲突。
+ * 用量通知和文件夹下载队列保留声明式 DLX 参数。部署策略见 docs/rabbitmq-topology.md。
+ * 配合 default-requeue-rejected=false，拒绝的消息按死信路由进入 DLQ。</p>
  *
  * @author 飞飞
  * @date 2026/07/10
@@ -84,20 +84,20 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue esInsertQueue() {
-        return QueueBuilder.durable(ESConstants.QUEUE.INSERT_QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(ESConstants.QUEUE.INSERT_QUEUE).build();
     }
 
     @Bean
     public Queue esDeleteQueue() {
-        return QueueBuilder.durable(ESConstants.QUEUE.DELETE_QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(ESConstants.QUEUE.DELETE_QUEUE).build();
     }
 
     @Bean
     public Queue esUpdateQueue() {
-        return QueueBuilder.durable(ESConstants.QUEUE.UPDATE_QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(ESConstants.QUEUE.UPDATE_QUEUE).build();
     }
 
     @Bean
@@ -128,14 +128,14 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue pgInsertQueue() {
-        return QueueBuilder.durable(CommonConstants.PG.INSERT_QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(CommonConstants.PG.INSERT_QUEUE).build();
     }
 
     @Bean
     public Queue pgDeleteQueue() {
-        return QueueBuilder.durable(CommonConstants.PG.DELETE_QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(CommonConstants.PG.DELETE_QUEUE).build();
     }
 
     @Bean
@@ -153,15 +153,15 @@ public class RabbitMQConfig {
     // ==================== 操作日志 ====================
 
     @Bean
-    public TopicExchange logTopicExchange() {
-        return ExchangeBuilder.topicExchange(CommonConstants.LogMQ.EXCHANGE)
+    public DirectExchange logTopicExchange() {
+        return ExchangeBuilder.directExchange(CommonConstants.LogMQ.EXCHANGE)
                 .durable(true).build();
     }
 
     @Bean
     public Queue logQueue() {
-        return QueueBuilder.durable(CommonConstants.LogMQ.QUEUE)
-                .withArguments(dlxArgs()).build();
+        // 历史队列的 DLX 由 mycloud-legacy-dlx policy 配置，不能追加声明参数。
+        return QueueBuilder.durable(CommonConstants.LogMQ.QUEUE).build();
     }
 
     @Bean

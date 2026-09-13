@@ -17,6 +17,7 @@ class LogbackConfigurationTest {
     void productionConfigWritesTraceAndSeparatesErrorFile() throws Exception {
         LoggerContext context = new LoggerContext();
         context.putProperty("MYCLOUD_LOG_PATH", directory.toString().replace('\\', '/'));
+        context.putProperty("LOG_PATH", directory.toString().replace('\\', '/'));
         // 独立上下文需要与 SLF4J 共用 MDC adapter。
         context.setMDCAdapter(MDC.getMDCAdapter());
         JoranConfigurator configurator = new JoranConfigurator();
