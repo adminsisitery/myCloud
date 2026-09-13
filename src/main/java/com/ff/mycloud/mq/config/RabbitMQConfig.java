@@ -2,6 +2,7 @@ package com.ff.mycloud.mq.config;
 
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.common.constant.ESConstants;
+import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.ExchangeBuilder;
@@ -120,8 +121,8 @@ public class RabbitMQConfig {
     // ==================== PG 向量同步 ====================
 
     @Bean
-    public TopicExchange pgTopicExchange() {
-        return ExchangeBuilder.topicExchange(CommonConstants.PG.TOPIC_EXCHANGE)
+    public DirectExchange pgTopicExchange() {
+        return ExchangeBuilder.directExchange(CommonConstants.PG.TOPIC_EXCHANGE)
                 .durable(true).build();
     }
 
