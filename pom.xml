@@ -41,6 +41,11 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -270,13 +275,34 @@
             <artifactId>langchain4j-web-search-engine-tavily</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
     </dependencies>
 
+
+    <profiles>
+        <profile>
+            <id>agent-release</id>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <excludes>
+                            <exclude>application.yml</exclude>
+                            <exclude>application-example.yml</exclude>
+                            <exclude>local_application*.yml</exclude>
+                        </excludes>
+                    </resource>
+                    <resource><directory>src/main/agent-release</directory></resource>
+                </resources>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <configuration><excludes><exclude>local_application*.yml</exclude></excludes></configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
