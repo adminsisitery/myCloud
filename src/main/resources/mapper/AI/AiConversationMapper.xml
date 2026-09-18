@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ff.mycloud.ai.persistence.mapper.AiConversationMapper">
+
+    <update id="update">
+        UPDATE t_ai_conversation
+        SET title = #{name}
+        WHERE id = #{CId}
+    </update>
+
+    <select id="getConversationListByUserId" resultType="com.ff.mycloud.ai.conversation.vo.ConversationVO">
+        SELECT id,
+               user_id  AS userId,
+               title,
+               model,
+               mode,
+               count    AS messageCount,
+               total_tokens AS totalTokens,
+               create_time AS createTime,
+               update_time AS updateTime
+        FROM t_ai_conversation
+        WHERE user_id = #{UserId}
+        ORDER BY update_time DESC
+    </select>
+
+    <select id="selectByCId" resultType="com.ff.mycloud.ai.conversation.vo.MessageVO">
+        SELECT id,
+               conversation_id AS conversationId,
+               role,
+               content,
+               input_tokens  AS inputTokens,
+               output_tokens AS outputTokens,
+               create_time AS createTime
+        FROM t_ai_message
+        WHERE conversation_id = #{CId}
+        ORDER BY create_time ASC
+    </select>
+
+</mapper>

@@ -1,7 +1,7 @@
 package com.ff.mycloud.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.ai.retrieval.query.QueryData;
 import com.ff.mycloud.common.constant.CommonConstants;
 import com.ff.mycloud.model.entity.FileInfo;
 import com.ff.mycloud.model.vo.FileListVO;

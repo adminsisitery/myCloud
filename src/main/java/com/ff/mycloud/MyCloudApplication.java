@@ -34,7 +34,7 @@ import org.springframework.context.annotation.Bean;
  */
 @SpringBootApplication()
 @MapperScan("com.ff.mycloud.repositorys")
-@MapperScan("com.ff.mycloud.ai.mapper")
+@MapperScan("com.ff.mycloud.ai.persistence.mapper")
 @EnableConfigurationProperties(AIProperties.class)
 @EnableCaching
 @EnableRetry

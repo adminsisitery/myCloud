@@ -17,6 +17,10 @@ import java.util.List;
  */
 public interface FileSearchRepository extends ElasticsearchRepository<FileDocument,Long> {
 
+    List<FileDocument> findByFileNameContainingAndUserId(String keyword, Long userId, org.springframework.data.domain.Pageable page);
+
+    List<FileDocument> findByContentContainingAndUserId(String keyword, Long userId, org.springframework.data.domain.Pageable page);
+
     /**
      * 根据文件名关键词和用户ID模糊搜索
      */

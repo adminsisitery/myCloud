@@ -1,6 +1,10 @@
 package com.ff.mycloud.ai.config;
 
-import com.ff.mycloud.ai.service.SearchChatAssistant;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ff.mycloud.ai.model.ModelRegistry;
+import com.ff.mycloud.ai.observability.LangfuseChatModelListener;
+import com.ff.mycloud.ai.observability.LangfuseProperties;
+import com.ff.mycloud.ai.retrieval.query.SearchChatAssistant;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
@@ -19,16 +23,14 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import dev.langchain4j.web.search.WebSearchEngine;
 import dev.langchain4j.web.search.tavily.TavilyWebSearchEngine;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.concurrent.TimeUnit;
 
 @Configuration
 @EnableConfigurationProperties(LangfuseProperties.class)
@@ -57,23 +59,23 @@ public class AIConfig {
                 .modelName(properties.getEmbeddingModel())
                 .dimensions(properties.getEmbeddingDimensions())
                 .timeout(properties.getTimeout())
-                .maxRetries(3)
-                .logRequests(true)
-                .logResponses(true)
+                .maxRetries(0)
+                .logRequests(false)
+                .logResponses(false)
                 .build();
     }
 
     @Bean
-    EmbeddingStore<TextSegment> embeddingStore() {
+    EmbeddingStore<TextSegment> embeddingStore(PgVectorProperties pg) {
         return PgVectorEmbeddingStore.builder()
-                .host("47.95.192.221")
-                .port(5432)
-                .user("postgres")
-                .password("2005525a")
-                .database("postgres")
-                .table("file_segment")
-                .dimension(1536)
-                .createTable(true)
+                .host(pg.getHost())
+                .port(pg.getPort())
+                .user(pg.getUser())
+                .password(pg.getPassword())
+                .database(pg.getDatabase())
+                .table(pg.getTable())
+                .dimension(properties.getEmbeddingDimensions())
+                .createTable(pg.isCreateTable())
                 .build();
     }
 
@@ -89,7 +91,7 @@ public class AIConfig {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
-            name = "ai.tavily-api-key", matchIfMissing = false)
+            name = "ai.web-search-enabled", havingValue = "true", matchIfMissing = false)
     WebSearchEngine webSearchEngine() {
         return TavilyWebSearchEngine.builder()
                 .apiKey(properties.getTavilyApiKey())
@@ -120,7 +122,7 @@ public class AIConfig {
 
             @Override
             public void onResponse(ChatModelResponseContext responseContext) {
-                long start = (long) responseContext.attributes().get("start");
+                long start = (long) responseContext.attributes().getOrDefault("start", System.currentTimeMillis());
                 long latency = System.currentTimeMillis() - start;
                 String model = responseContext.chatRequest().modelName();
 
@@ -133,6 +135,10 @@ public class AIConfig {
 
                 // Token 用量
                 var usage = responseContext.chatResponse().tokenUsage();
+                if (usage == null || usage.inputTokenCount() == null || usage.outputTokenCount() == null) {
+                    meterRegistry.counter("ai.chat.usage.missing", "model", model).increment();
+                    return;
+                }
                 meterRegistry.counter("ai.chat.tokens.input", "model", model)
                         .increment(usage.inputTokenCount());
                 meterRegistry.counter("ai.chat.tokens.output", "model", model)
@@ -153,6 +159,7 @@ public class AIConfig {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name="langfuse.enabled", havingValue="true")
     LangfuseChatModelListener langfuseChatModelListener(LangfuseProperties props, ObjectMapper objectMapper) {
         return new LangfuseChatModelListener(props, objectMapper);
     }

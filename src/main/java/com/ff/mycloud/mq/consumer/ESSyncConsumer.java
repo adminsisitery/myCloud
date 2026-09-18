@@ -31,9 +31,14 @@ import org.springframework.stereotype.Component;
 public class ESSyncConsumer {
 
     private final FileSearchService fileSearchService;
+    private final com.ff.mycloud.service.FileInfoMapperService files;
+    private final org.redisson.api.RedissonClient redis;
 
-    public ESSyncConsumer(FileSearchService fileSearchService) {
+    public ESSyncConsumer(FileSearchService fileSearchService, com.ff.mycloud.service.FileInfoMapperService files,
+                          org.redisson.api.RedissonClient redis) {
         this.fileSearchService = fileSearchService;
+        this.files = files;
+        this.redis = redis;
     }
 
     /** 文件上传/秒传 → 写入ES索引 */
@@ -41,7 +46,7 @@ public class ESSyncConsumer {
     @RabbitListener(queues = ESConstants.QUEUE.INSERT_QUEUE)
     public void esInsert(FileDocument message) {
         log.debug("消息消费开始: operation=esInsert, businessId={}", message.getId());
-        fileSearchService.save(message);
+        synchronize(message, false);
     }
 
     /** 文件删除 → 从ES索引中删除 */
@@ -49,7 +54,7 @@ public class ESSyncConsumer {
     @RabbitListener(queues = ESConstants.QUEUE.DELETE_QUEUE)
     public void esDelete(FileDocument message) {
         log.debug("消息消费开始: operation=esDelete, businessId={}", message.getId());
-        fileSearchService.del(message.getId());
+        synchronize(message, true);
     }
 
     /** 文件重命名 → 更新ES索引中的文件名 */
@@ -57,6 +62,30 @@ public class ESSyncConsumer {
     @RabbitListener(queues = ESConstants.QUEUE.UPDATE_QUEUE)
     public void esUpdate(FileDocument message) {
         log.debug("消息消费开始: operation=esUpdate, businessId={}", message.getId());
-        fileSearchService.renameById(message.getId(), message.getFileName());
+        synchronize(message, false);
+    }
+
+    private void synchronize(FileDocument message, boolean deletion) {
+        var lock = redis.getLock("file-index:" + message.getId());
+        boolean acquired = false;
+        try {
+            acquired = lock.tryLock(10, java.util.concurrent.TimeUnit.SECONDS);
+            if (!acquired) throw new IllegalStateException("索引繁忙，请重试");
+            var current = files.getById(message.getId());
+            if (current == null || Boolean.TRUE.equals(current.getIsDeleted())) {
+                fileSearchService.del(message.getId());
+                return;
+            }
+            if (deletion) return;
+            if (message.getUserId() != null && !java.util.Objects.equals(message.getUserId(), current.getUserId())) return;
+            message.setUserId(current.getUserId());
+            message.setFileName(current.getFilename() + (Boolean.TRUE.equals(current.getIsFolder()) ? "" : "." + java.util.Objects.toString(current.getFileSuffix(), "")));
+            fileSearchService.save(message);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("索引任务已中断", error);
+        } finally {
+            if (acquired && lock.isHeldByCurrentThread()) lock.unlock();
+        }
     }
 }

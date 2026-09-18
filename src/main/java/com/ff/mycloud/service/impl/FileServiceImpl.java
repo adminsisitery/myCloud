@@ -292,6 +292,7 @@ public class FileServiceImpl implements FileService {
                 document = parseLocalFile(file);
                 PgSender pgs = PgSender.builder()
                         .fileId(fileInfo.getId())
+                        .contentHash(fileInfo.getSha256Hash())
                         .userId(currentUserId)
                         .text(document.text())
                         .build();
@@ -596,6 +597,7 @@ public class FileServiceImpl implements FileService {
      * @throws BusinessException 当文件名为空或文件不存在时抛出
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public void renameFile(Long fileId, String newFilename) {
 
         if (newFilename == null || newFilename.trim().isEmpty()) {
@@ -606,15 +608,40 @@ public class FileServiceImpl implements FileService {
         if (fileInfo == null) {
             throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
         }
-        // 去除文件名中的后缀扩展名
-        int dotIndex = newFilename.lastIndexOf(".");
-        if (dotIndex != -1) {
-            newFilename = newFilename.substring(0, dotIndex);
+        if (!java.util.Objects.equals(fileInfo.getUserId(), UserContext.getCurrentUserId()) || Boolean.TRUE.equals(fileInfo.getIsDeleted())) {
+            throw new BusinessException(ErrorCode.NO_PERMISSION);
         }
-
+        newFilename = newFilename.trim();
+        String suffix = fileInfo.getFileSuffix();
+        boolean folder = Boolean.TRUE.equals(fileInfo.getIsFolder());
+        if (!folder && suffix != null && newFilename.toLowerCase(java.util.Locale.ROOT).endsWith("." + suffix.toLowerCase(java.util.Locale.ROOT))) {
+            newFilename = newFilename.substring(0, newFilename.length()-suffix.length()-1);
+        }
+        if (newFilename.isBlank() || newFilename.length()>50 || newFilename.equals(".") || newFilename.equals("..") ||
+                newFilename.chars().anyMatch(c -> c<32 || "\\/:*?\"<>|".indexOf(c)>=0)) throw new BusinessException(ErrorCode.INVALID_FILENAME);
+        String oldName = fileInfo.getFilename();
+        for (FileInfo sibling : fileInfoMapperService.findByParentIdAndUserId(fileInfo.getUserId(),fileInfo.getParentId()==null?0L:fileInfo.getParentId())) {
+            if (!fileId.equals(sibling.getId()) && newFilename.equalsIgnoreCase(sibling.getFilename()) &&
+                    java.util.Objects.equals(fileInfo.getIsFolder(),sibling.getIsFolder()) && java.util.Objects.equals(suffix,sibling.getFileSuffix()))
+                throw new BusinessException(ErrorCode.INVALID_FILENAME,"目标目录已存在同名文件");
+        }
+        String oldPath = fileInfo.getLocalFilePath();
+        String newPath = oldPath;
+        if (oldPath != null) {
+            String parentPath = folder && oldPath.endsWith(oldName+"/") ? oldPath.substring(0,oldPath.length()-oldName.length()-1) : oldPath.substring(0,oldPath.lastIndexOf('/')+1);
+            newPath = parentPath + newFilename + (folder?"/":suffix==null||suffix.isBlank()?"":"."+suffix);
+        }
+        List<FileInfo> descendants = folder && oldPath!=null ? fileInfoMapperService.getSubTree(oldPath,fileInfo.getUserId()):List.of();
         fileInfo.setFilename(newFilename);
+        fileInfo.setLocalFilePath(newPath);
         fileInfo.setUpdatedAt(LocalDateTime.now());
         fileInfoMapperService.updateById(fileInfo);
+        for (FileInfo child : descendants) {
+            if (!fileId.equals(child.getId()) && child.getLocalFilePath()!=null && child.getLocalFilePath().startsWith(oldPath)) {
+                child.setLocalFilePath(newPath+child.getLocalFilePath().substring(oldPath.length()));
+                child.setUpdatedAt(LocalDateTime.now()); fileInfoMapperService.updateById(child);
+            }
+        }
 //
         //异步同步ES重命名
         FileDocument fd = new FileDocument();
@@ -623,7 +650,7 @@ public class FileServiceImpl implements FileService {
         rabbitMqService.sendUpdateMessage(fd);
         sendOpLog(OperationLog.OP_RENAME, fileId,
                 fd.getFileName(), fileInfo.getFileSize(),
-                "原文件名:" + fileInfo.getFilename() + "." + fileInfo.getFileSuffix());
+                "原文件名:" + oldName);
         log.info("文件重命名完成: fileId={}, userId={}", fileId, fileInfo.getUserId());
     }
 

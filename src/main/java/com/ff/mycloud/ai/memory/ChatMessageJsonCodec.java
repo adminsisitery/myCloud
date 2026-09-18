@@ -13,7 +13,6 @@ import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -132,27 +131,17 @@ final class ChatMessageJsonCodec {
     private static String textOfUser(UserMessage msg) {
         try {
             String t = msg.singleText();
-            if (t != null && !t.isBlank()) return stripRagAugmentation(t);
+            if (t != null && !t.isBlank()) return t;
         } catch (Exception ignored) {}
         try {
             for (dev.langchain4j.data.message.Content c : msg.contents()) {
                 if (c instanceof dev.langchain4j.data.message.TextContent tc) {
                     String t = tc.text();
-                    if (t != null && !t.isBlank()) return stripRagAugmentation(t);
+                    if (t != null && !t.isBlank()) return t;
                 }
             }
         } catch (Exception ignored) {}
         return msg.toString();
     }
 
-    private static String stripRagAugmentation(String text) {
-        if (text == null || text.length() <= 200) return text;
-        int idx = text.indexOf("\n\nAnswer using the following information:");
-        if (idx > 0) return text.substring(0, idx).trim();
-        idx = text.indexOf("\n\nHere are");
-        if (idx > 0) return text.substring(0, idx).trim();
-        idx = text.indexOf("\n\nBased on the following");
-        if (idx > 0) return text.substring(0, idx).trim();
-        return text;
-    }
 }

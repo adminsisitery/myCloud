@@ -3,11 +3,10 @@ package com.ff.mycloud.ai.tool;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.web.search.WebSearchEngine;
 import dev.langchain4j.web.search.WebSearchOrganicResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 联网搜索工具，使用 Tavily Search API。
@@ -29,6 +28,7 @@ public class WebSearchTool {
 
     @Tool("搜索互联网获取最新信息，返回搜索结果列表")
     public String webSearch(String query) {
+        if (query==null || query.isBlank() || query.length()>1000) return "ERROR: 搜索词应为1到1000字符";
         if (count.incrementAndGet() > MAX_CALLS) {
             log.warn("[Tool] webSearch 已达上限({})，拒绝执行", MAX_CALLS);
             return "搜索次数已达上限，请直接基于已有信息回答用户。";
@@ -56,7 +56,7 @@ public class WebSearchTool {
             return sb.toString();
         } catch (Exception e) {
             log.error("[Tool] webSearch failed", e);
-            return "搜索失败：" + e.getMessage();
+            return "ERROR: 搜索服务暂时不可用";
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.ff.mycloud.handler;
 
-import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.ai.retrieval.query.QueryData;
 import com.ff.mycloud.model.vo.FileListVO;
 
 import java.util.List;

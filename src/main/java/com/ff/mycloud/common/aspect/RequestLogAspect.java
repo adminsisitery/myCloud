@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class RequestLogAspect {
     @Around("execution(public * com.ff.mycloud.Controller..*(..)) || "
-            + "execution(public * com.ff.mycloud.ai.controller..*(..))")
+            + "(execution(public * com.ff.mycloud.ai..*(..)) && @within(org.springframework.web.bind.annotation.RestController))")
     public Object logRequest(ProceedingJoinPoint point) throws Throwable {
         long start = System.nanoTime();
         String operation = point.getSignature().toShortString();

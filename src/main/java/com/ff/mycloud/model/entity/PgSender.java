@@ -12,4 +12,7 @@ public class PgSender implements Serializable {
     private String text;
     private Long userId;
     private Long fileId;
+    /** Restore requests rebuild text from the original object instead of trusting an old index. */
+    private boolean rebuild;
+    private String contentHash;
 }

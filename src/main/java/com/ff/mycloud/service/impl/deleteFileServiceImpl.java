@@ -199,6 +199,7 @@ public class deleteFileServiceImpl implements DeleteFileService {
      * </ol>
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public void restoreFile(Long fileId) {
         Long currentUserId = UserContext.getCurrentUserId();
 
@@ -214,26 +215,30 @@ public class deleteFileServiceImpl implements DeleteFileService {
             throw new BusinessException(ErrorCode.FILE_NOT_IN_TRASH);
         }
 
-        // 2. 原父目录已被删除则恢复到根目录
+        String originalPath = file.getLocalFilePath();
+        // 2. 原父目录不可用则恢复到根目录
         if (file.getParentId() != null && file.getParentId() != 0) {
             FileInfo parent = fileInfoMapperService.getById(file.getParentId());
-            if (parent != null && Boolean.TRUE.equals(parent.getIsDeleted())) {
+            if (parent == null || !currentUserId.equals(parent.getUserId()) || Boolean.TRUE.equals(parent.getIsDeleted())) {
                 log.info("原父目录已删除，恢复到根目录：fileId={}, oldParentId={}",
                         fileId, file.getParentId());
                 file.setParentId(0L);
-                if (file.getFileSuffix() != null && !file.getFileSuffix().isEmpty()) {
+                if (Boolean.TRUE.equals(file.getIsFolder())) {
+                    file.setLocalFilePath(file.getFilename() + "/");
+                } else if (file.getFileSuffix() != null && !file.getFileSuffix().isEmpty()) {
                     file.setLocalFilePath(file.getFilename() + "." + file.getFileSuffix());
                 } else {
                     file.setLocalFilePath(file.getFilename());
                 }
-                fileInfoMapperService.updateById(file);
             }
         }
 
         // 3. 文件夹：先查出所有子节点（用旧的 localFilePath）
         List<FileInfo> filesToRestore;
         if (file.getIsFolder()) {
-            filesToRestore = fileInfoMapperService.getTrashSubTree(file.getLocalFilePath(), currentUserId);
+            filesToRestore = new java.util.ArrayList<>(fileInfoMapperService.getTrashSubTree(originalPath, currentUserId));
+            filesToRestore.removeIf(f -> f.getId().equals(fileId));
+            filesToRestore.add(0,file);
         } else {
             filesToRestore = Collections.singletonList(file);
         }
@@ -244,10 +249,14 @@ public class deleteFileServiceImpl implements DeleteFileService {
         // 5. 恢复
         long restoredSize = 0;
         for (FileInfo f : filesToRestore) {
+            if (!f.getId().equals(fileId) && originalPath!=null && f.getLocalFilePath()!=null && f.getLocalFilePath().startsWith(originalPath)) {
+                f.setLocalFilePath(file.getLocalFilePath()+f.getLocalFilePath().substring(originalPath.length()));
+            }
             f.setIsDeleted(false);
             f.setDeletedAt(null);
             f.setUpdatedAt(LocalDateTime.now());
             fileInfoMapperService.updateById(f);
+            fileInfoMapperService.update(new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<FileInfo>().eq("id",f.getId()).eq("user_id",currentUserId).set("deleted_at",null));
 
             if (!f.getIsFolder()) {
                 restoredSize += f.getFileSize();
@@ -260,6 +269,10 @@ public class deleteFileServiceImpl implements DeleteFileService {
                     : f.getFilename() + "." + f.getFileSuffix());
             fd.setUserId(f.getUserId());
             rabbitMqService.sendInsertMessage(fd);
+            if (!Boolean.TRUE.equals(f.getIsFolder())) {
+                rabbitMqService.sendInsertPG(PgSender.builder().fileId(f.getId()).userId(f.getUserId())
+                        .contentHash(f.getSha256Hash()).rebuild(true).build());
+            }
         }
 
         // 4. 加回已用空间

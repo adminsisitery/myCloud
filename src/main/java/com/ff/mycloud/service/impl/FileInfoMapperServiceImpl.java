@@ -2,7 +2,7 @@ package com.ff.mycloud.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.ai.retrieval.query.QueryData;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.mapper.FileMapper;
 import com.ff.mycloud.model.entity.FileInfo;
@@ -208,7 +208,7 @@ public class FileInfoMapperServiceImpl
                         .eq(FileInfo::getLocalFilePath, localFilePath)
                         // 匹配所有子节点（比如文件夹2/xxx.txt）
                         .or()
-                        .likeRight(FileInfo::getLocalFilePath, s)
+                        .apply("local_file_path LIKE {0} ESCAPE '!'", s.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%")
                 )
                 .list();
     }
@@ -276,7 +276,7 @@ public class FileInfoMapperServiceImpl
                 .and(w -> w
                         .eq(FileInfo::getLocalFilePath, localFilePath)
                         .or()
-                        .likeRight(FileInfo::getLocalFilePath, s)
+                        .apply("local_file_path LIKE {0} ESCAPE '!'", s.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%")
                 )
                 .list();
     }

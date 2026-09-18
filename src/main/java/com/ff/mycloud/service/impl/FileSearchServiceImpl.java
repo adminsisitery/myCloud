@@ -2,7 +2,7 @@ package com.ff.mycloud.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import com.ff.mycloud.ES.FileSearchRepository;
-import com.ff.mycloud.ai.model.entity.QueryData;
+import com.ff.mycloud.ai.retrieval.query.QueryData;
 import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.model.entity.FileDocument;
 import com.ff.mycloud.model.entity.FileInfo;
@@ -121,6 +121,12 @@ public class FileSearchServiceImpl implements FileSearchService {
      */
     @Override
     public void save(FileDocument fileDocument) {
+        // Restore metadata can arrive after the rebuilt body. Do not erase that body.
+        if (fileDocument.getContent() == null || fileDocument.getContent().isBlank()) {
+            fileSearchRepository.findById(fileDocument.getId()).filter(existing ->
+                    java.util.Objects.equals(existing.getUserId(), fileDocument.getUserId()))
+                    .ifPresent(existing -> fileDocument.setContent(existing.getContent()));
+        }
         fileSearchRepository.save(fileDocument);
     }
 
