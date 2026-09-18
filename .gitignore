@@ -47,3 +47,9 @@ build/
 
 # ===== 日志 =====
 *.log
+
+# Agent local configuration and evaluation output
+.env
+.env.*
+!.env.example
+/agent-evaluation*.json
