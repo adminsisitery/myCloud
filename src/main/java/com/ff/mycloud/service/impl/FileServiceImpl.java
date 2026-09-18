@@ -11,7 +11,9 @@ import com.ff.mycloud.common.util.UserContext;
 import com.ff.mycloud.enums.ErrorCode;
 import com.ff.mycloud.enums.FileObjectStatus;
 import com.ff.mycloud.mapper.FileMapper;
+import com.ff.mycloud.model.dto.FastUploadRequest;
 import com.ff.mycloud.model.entity.*;
+import com.ff.mycloud.model.vo.FastUploadVO;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileDownloadVO;
 import com.ff.mycloud.model.vo.FileListVO;
@@ -917,6 +919,9 @@ public class FileServiceImpl implements FileService {
 
         // 使用MapStruct创建一个新的文件记录
         FileInfo newFileInfo = fileMapper.toFileInfoForFastUpload(resolvedFilename, finalBaseName, existingFile, currentUser.getId(), parentId, sha256Hash);
+        // toFileInfoForFastUpload 未映射 fileSuffix，必须在此补齐：
+        // listStarredFiles / ES 同步都用 `filename + "." + fileSuffix` 拼完整文件名，为 null 会拼出 "xxx.null"
+        newFileInfo.setFileSuffix(finalSuffix);
         newFileInfo.setCategoryId(categoryFiles(newFileInfo));
 
 //         如果有任务ID，则进行进度跟踪
@@ -941,44 +946,127 @@ public class FileServiceImpl implements FileService {
     }
 
     /**
-     * 文件秒传校验
-     * <p>根据SHA-256哈希值查询文件是否已存在，返回是否可秒传的结果。</p>
+     * 文件秒传校验（只判定，不落库）
+     * <p>根据 SHA-256 + 文件大小在<b>当前用户</b>范围内查找可复用的物理对象，返回是否可秒传。</p>
+     * <p>本方法必须无副作用：它的职责只是让客户端提前决定「这个文件要不要发字节」，
+     * 落库由 {@link #fastUpload(FastUploadRequest)} 重新校验后执行。</p>
      *
-     * @param fileCheck 文件校验参数
+     * @param fileCheck 文件校验参数（sha256Hash 与 fileSize 缺一即判为不可秒传）
      * @return 文件校验结果视图（exists=true表示可秒传）
      */
     @Override
     public Result<FileCheckVO> checkFilesHash(FileCheck fileCheck) {
         String sha256Hash = fileCheck.getSha256Hash();
-        List<FileInfo> byHashAndUserId = fileInfoMapperService.findByHashAndUserId(sha256Hash, UserContext.getCurrentUserId());
-        if (byHashAndUserId.isEmpty()) {
-            //如果没有就不用秒传
-            FileCheckVO build = FileCheckVO.builder().exists(false).build();
-            return Result.success(build);
+        Long fileSize = fileCheck.getFileSize();
+        // 参数不完整时一律判为不可秒传：没有 size 就无法排除 hash 碰撞/伪造
+        if (sha256Hash == null || sha256Hash.isBlank() || fileSize == null) {
+            return Result.success(FileCheckVO.builder().exists(false).build());
         }
-        //增加size判断 避免假秒传（hash碰撞或前端篡改fileSize）
-        FileInfo existingFile = byHashAndUserId.get(0);
-        if (!fileCheck.getFileSize().equals(existingFile.getFileSize())) {
-            //不是秒传
-            FileCheckVO build = FileCheckVO.builder().exists(false).build();
-            return Result.success(build);
-        }
-        //存在就秒传
-        FileCheckVO fvo = FileCheckVO.builder().exists(true).build();
 
-        //创建新的数据库记录
-//        FileInfo fileInfo = byHashAndUserId.get(0);
-//        String localFilePath="";
-//        String parentId = fileCheck.getParentId();
-//        if (parentId!=null){
-//            FileInfo byId = fileInfoMapperService.getById(parentId);
-//            if(byId!=null) {
-//                localFilePath = byId.getLocalFilePath() + fileCheck.getFileName();
-//            }
-//        }
-//        FileInfo fileInfos = fileMapper.toFileInfoFromFileCheck(fileCheck,fileInfo.getPath(),UserContext.getCurrentUserId(), localFilePath,fileInfo.getFileType());
-//        fileInfoMapperService.save(fileInfos);
-        return Result.success(fvo);
+        List<FileInfo> byHashAndUserId =
+                fileInfoMapperService.findByHashAndUserId(sha256Hash, UserContext.getCurrentUserId());
+        // 命中还需比对 size，避免假秒传（hash 碰撞或前端篡改 fileSize）
+        boolean exists = byHashAndUserId.stream().anyMatch(f -> fileSize.equals(f.getFileSize()));
+
+        // 只做判定，不落库：客户端据此决定是否还需要发字节，
+        // 真正的落库在 fastUpload() 里重新校验后执行（check 与 fastUpload 之间可能发生删除）
+        return Result.success(FileCheckVO.builder().exists(exists).build());
+    }
+
+    /**
+     * 执行秒传（秒传判定的后半段）
+     * <p>
+     * 在 {@link #checkFilesHash} 返回 exists=true 之后调用。服务端在目标目录建一条逻辑记录，
+     * {@code path} 复用已有物理对象，<b>不传输任何文件字节</b>。
+     * </p>
+     * <p>
+     * 三个硬约束：
+     * <ol>
+     *   <li>不信任入参——sha256 与 size 一律重算重查，check 的结论不作数；</li>
+     *   <li>幂等——目标目录已有「同 hash + 同名」记录时直接复用，客户端重试不会产生重复文件；</li>
+     *   <li>不改物理存储——只插入 t_file_info 记录，refCount / OSS 对象完全不动。</li>
+     * </ol>
+     *
+     * @param request 秒传请求（文件名、大小、SHA-256、目标目录）
+     * @return 落库结果（fileId、最终文件名）
+     */
+    @Override
+    public Result<FastUploadVO> fastUpload(FastUploadRequest request) {
+        Long currentUserId = UserContext.getCurrentUserId();
+
+        // ---- 1. 入参校验：全部重算，不信任客户端 ----
+        String rawHash = request.getSha256Hash();
+        String sha256Hash = rawHash == null ? null : rawHash.trim().toLowerCase();
+        if (sha256Hash == null || !sha256Hash.matches("[0-9a-f]{64}")) {
+            return Result.error(ErrorCode.INVALID_PARAM.getHttpStatus(), "sha256Hash 必须是 64 位十六进制字符串");
+        }
+        if (request.getFileName() == null || request.getFileName().isBlank()) {
+            return Result.error(ErrorCode.INVALID_PARAM.getHttpStatus(), "fileName 不能为空");
+        }
+        Long fileSize = request.getFileSize();
+        if (fileSize == null || fileSize <= 0) {
+            return Result.error(ErrorCode.INVALID_PARAM.getHttpStatus(), "fileSize 必须大于 0");
+        }
+
+        // ---- 2. 重新确认服务端确有可复用的物理对象 ----
+        FileInfo existingFile = fileInfoMapperService.findByHashAndUserId(sha256Hash, currentUserId).stream()
+                .filter(f -> fileSize.equals(f.getFileSize()))
+                .filter(f -> !Boolean.TRUE.equals(f.getIsFolder()))
+                .findFirst()
+                .orElse(null);
+        if (existingFile == null) {
+            return Result.error(ErrorCode.FAST_UPLOAD_UNAVAILABLE.getHttpStatus(),
+                    ErrorCode.FAST_UPLOAD_UNAVAILABLE.getMessage());
+        }
+
+        // ---- 3. 目标目录归属校验：必须指向当前用户在用的文件夹 ----
+        Long parentId = request.getParentId();
+        if (parentId != null && parentId != 0L) {
+            FileInfo parent = fileInfoMapperService.findByIdAndUserId(parentId, currentUserId);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted())
+                    || !Boolean.TRUE.equals(parent.getIsFolder())) {
+                return Result.error(ErrorCode.FILE_NOT_FOUND.getHttpStatus(), "目标目录不存在");
+            }
+        }
+
+        // ---- 4. 文件名拆解（与 handleFastUpload 内保持一致的口径） ----
+        String fileName = request.getFileName().trim();
+        int dotIdx = fileName.lastIndexOf(".");
+        String baseName = dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName;
+        String suffix = dotIdx > 0 ? fileName.substring(dotIdx + 1) : "";
+
+        // ---- 5. 幂等：目标目录已有「同 hash + 同名」记录时直接复用 ----
+        for (FileInfo sibling : fileInfoMapperService.findByParentIdAndUserId(currentUserId, parentId)) {
+            if (sha256Hash.equals(sibling.getSha256Hash())
+                    && baseName.equals(sibling.getFilename())
+                    && Objects.equals(suffix, sibling.getFileSuffix())) {
+                log.info("秒传幂等命中，复用已有记录：fileId={}, parentId={}", sibling.getId(), parentId);
+                return Result.success(FastUploadVO.builder()
+                        .fileId(sibling.getId())
+                        .filename(fileName)
+                        .fileSize(fileSize)
+                        .reused(true)
+                        .build());
+            }
+        }
+
+        // ---- 6. 落库：防重名、分类、ES 同步、操作日志都在 handleFastUpload 内完成 ----
+        User currentUser = userMapperServiceImpl.findOneByUserId(currentUserId);
+        FileInfo newFileInfo = handleFastUpload(fileName, fileSize, existingFile, sha256Hash,
+                parentId, request.getTaskId(), currentUser);
+
+        log.info("秒传成功：userId={}, fileId={}, filename={}, size={}",
+                currentUserId, newFileInfo.getId(), newFileInfo.getFilename(), fileSize);
+
+        String resolvedSuffix = newFileInfo.getFileSuffix();
+        return Result.success(FastUploadVO.builder()
+                .fileId(newFileInfo.getId())
+                .filename(resolvedSuffix == null || resolvedSuffix.isEmpty()
+                        ? newFileInfo.getFilename()
+                        : newFileInfo.getFilename() + "." + resolvedSuffix)
+                .fileSize(newFileInfo.getFileSize())
+                .reused(false)
+                .build());
     }
 
     /**

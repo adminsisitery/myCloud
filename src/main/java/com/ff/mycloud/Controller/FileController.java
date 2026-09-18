@@ -3,9 +3,11 @@ package com.ff.mycloud.Controller;
 import com.ff.mycloud.common.annotation.RateLimit;
 import com.ff.mycloud.common.result.Result;
 import com.ff.mycloud.handler.FileSearchHandler;
+import com.ff.mycloud.model.dto.FastUploadRequest;
 import com.ff.mycloud.model.dto.FileRenameDTO;
 import com.ff.mycloud.model.dto.MoveFileDTO;
 import com.ff.mycloud.model.entity.FileCheck;
+import com.ff.mycloud.model.vo.FastUploadVO;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.model.vo.FileDownloadVO;
@@ -226,14 +228,15 @@ public class FileController {
     }
 
     /**
-     * 文件秒传检测
+     * 文件秒传检测（判定阶段，无副作用）
      * <p>
-     * 根据文件的哈希值检测该文件是否已存在于服务器中。
-     * 如果已存在则无需再次上传，直接返回已有文件信息（秒传机制）。
+     * 按 SHA-256 + 文件大小检测该文件是否已在服务器中存在。命中则客户端可跳过上传字节，
+     * 但本接口<b>不会</b>落库、也不返回文件信息；真正的落库由
+     * {@code POST /api/files/fast-upload} 完成。
      * </p>
      *
-     * @param fileCheck 包含文件哈希等信息的检测参数
-     * @return 文件检测结果 VO
+     * @param fileCheck 包含 sha256Hash 与 fileSize 的检测参数
+     * @return 文件检测结果 VO，exists=true 表示可秒传
      */
     @PostMapping("/check")
     @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
@@ -293,9 +296,20 @@ public class FileController {
     }
 
 
-//    @PostMapping("/fast-upload")
-//    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
-//    public Result<FileCheckVO> checkFiles(@RequestParam FileCheck fileCheck) {
-//        return fileService.checkFilesHash(fileCheck);
-//    }
+    /**
+     * 文件秒传执行（落库阶段）
+     * <p>
+     * 秒传链路的后半段。客户端先用 {@code POST /api/files/check} 判定，命中后再调本接口在目标目录落库，
+     * 全程不传输文件字节。服务端不信任请求内容：会重新按 sha256 + fileSize 确认物理对象存在，
+     * 并保证幂等——目标目录已有同内容同名记录时返回原记录，不重复插入。
+     * </p>
+     *
+     * @param request 秒传请求体（fileName / fileSize / sha256Hash / parentId），JSON
+     * @return 落库结果，{@code data.fileId} 为文件记录ID
+     */
+    @PostMapping("/fast-upload")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER, RateLimit.Dimension.IP}, permitsPerSecond = 2.0, timeout = 1000)
+    public Result<FastUploadVO> fastUpload(@RequestBody FastUploadRequest request) {
+        return fileService.fastUpload(request);
+    }
 }

@@ -1,8 +1,10 @@
 package com.ff.mycloud.service;
 
 import com.ff.mycloud.common.result.Result;
+import com.ff.mycloud.model.dto.FastUploadRequest;
 import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.entity.FileInfo;
+import com.ff.mycloud.model.vo.FastUploadVO;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
 import com.ff.mycloud.model.vo.FileDownloadVO;
@@ -120,6 +122,19 @@ public interface FileService {
      * @return 文件校验结果视图
      */
     Result<FileCheckVO> checkFilesHash(FileCheck fileCheck);
+
+    /**
+     * 执行秒传（秒传判定的后半段）
+     * <p>
+     * 在 {@link #checkFilesHash} 返回 exists=true 之后调用：服务端在目标目录建一条逻辑文件记录，
+     * 复用已有的物理对象，不再传输文件字节。本方法会重新校验物理对象确实存在，并保证幂等
+     * （目标目录已有同内容同名记录时直接返回，不重复插入）。
+     * </p>
+     *
+     * @param request 秒传请求（文件名、大小、SHA-256、目标目录）
+     * @return 落库结果（fileId、最终文件名）
+     */
+    Result<FastUploadVO> fastUpload(FastUploadRequest request);
 
     void copyFile(Long fileId);
 
