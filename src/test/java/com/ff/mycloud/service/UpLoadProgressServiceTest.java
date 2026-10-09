@@ -78,4 +78,32 @@ class UpLoadProgressServiceTest {
         assertTrue(service.tryMarkSpaceReleased(TASK_ID));
         assertFalse(service.tryMarkSpaceReleased(TASK_ID));
     }
+
+    @Test
+    void reservationMarkerShouldKeepCancelledTaskScannable() {
+        // 取消把任务置成终态。没有预占标记时，终态不该被超时扫描捡起（原有行为）
+        service.cancelUploadTask(TASK_ID, "cancelled");
+        assertFalse(task.holdsUnsettledReservation());
+
+        // 一旦标记了「预占未结清」，即便已是终态也必须能被扫描捡起来归还 ——
+        // 这是「用户取消 + 异步线程从未执行」导致空间永久泄漏的那个盲区
+        service.markSpaceReserved(TASK_ID);
+        assertTrue(task.isSpaceReserved());
+        assertTrue(task.holdsUnsettledReservation());
+
+        // 结清之后不再处理
+        service.clearSpaceReserved(TASK_ID);
+        assertFalse(task.isSpaceReserved());
+        assertFalse(task.holdsUnsettledReservation());
+    }
+
+    @Test
+    void successfulTaskShouldNeverBeTreatedAsRefundable() {
+        service.markSpaceReserved(TASK_ID);
+        service.completeUploadTask(TASK_ID, true, "ok");
+
+        // 文件已落库，预占转为真实占用：即使标记残留也不得视为可退还
+        assertTrue(task.isSpaceReserved());
+        assertFalse(task.holdsUnsettledReservation());
+    }
 }

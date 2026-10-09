@@ -84,6 +84,11 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
                     currentUserId
             );
 
+            // 文件已落库，预占正式转为真实占用 —— 先结清该任务的预占额度。
+            // 必须在 completeUploadTask 之前：此刻状态可能已被用户取消置成 CANCELLED（终态），
+            // completeUploadTask(true) 会被 isTerminal 拦下，不能指望它来收口。
+            // 不结清的后果是超时扫描会把一笔已经成立的实际占用当成漏还退回去（资损方向）。
+            upLoadProgressService.clearSpaceReserved(taskId);
             upLoadProgressService.completeUploadTask(taskId, true, "文件上传成功");
             log.info("Async file upload finished, taskId={}, userId={}, fileName={}",
                     taskId, currentUserId, originalFilename);

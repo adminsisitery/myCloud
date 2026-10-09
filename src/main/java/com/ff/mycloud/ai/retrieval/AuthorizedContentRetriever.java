@@ -4,10 +4,13 @@ import com.ff.mycloud.service.FileInfoMapperService;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
+
 import java.util.*;
 import java.util.function.Consumer;
 
-/** All model-visible file evidence crosses this live permission and length boundary. */
+/**
+ * All model-visible file evidence crosses this live permission and length boundary.
+ */
 public final class AuthorizedContentRetriever implements ContentRetriever {
     private final ContentRetriever delegate;
     private final FileInfoMapperService files;
@@ -24,16 +27,22 @@ public final class AuthorizedContentRetriever implements ContentRetriever {
         this.recordSource = recordSource;
     }
 
-    @Override public List<Content> retrieve(Query query) {
+    @Override
+    public List<Content> retrieve(Query query) {
         check.run();
         try {
             List<Content> result = new ArrayList<>();
             for (Content content : delegate.retrieve(query)) {
                 String id = content.textSegment().metadata().getString("fileId");
                 Long fileId;
-                try { fileId = Long.valueOf(id); } catch (NumberFormatException invalid) { continue; }
+                try {
+                    fileId = Long.valueOf(id);
+                } catch (NumberFormatException invalid) {
+                    continue;
+                }
                 var file = files.getById(fileId);
-                if (file == null || !Objects.equals(file.getUserId(), userId) || Boolean.TRUE.equals(file.getIsDeleted())) continue;
+                if (file == null || !Objects.equals(file.getUserId(), userId) || Boolean.TRUE.equals(file.getIsDeleted()))
+                    continue;
                 String text = content.textSegment().text();
                 if (text == null || text.isBlank()) continue;
                 String name = Objects.toString(file.getFilename(), "文件").replaceAll("[\\r\\n\\[\\]]", " ");

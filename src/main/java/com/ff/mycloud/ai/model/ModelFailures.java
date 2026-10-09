@@ -2,16 +2,22 @@ package com.ff.mycloud.ai.model;
 
 import dev.langchain4j.exception.HttpException;
 
-/** Classify provider failures without exposing response bodies, keys or internal URLs. */
+/**
+ * Classify provider failures without exposing response bodies, keys or internal URLs.
+ */
 public final class ModelFailures {
-    private ModelFailures() {}
+    private ModelFailures() {
+    }
+
     public static boolean retryable(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-            if (cause instanceof HttpException http && (http.statusCode() == 429 || http.statusCode() == 502 || http.statusCode() == 503 || http.statusCode() == 504)) return true;
+            if (cause instanceof HttpException http && (http.statusCode() == 429 || http.statusCode() == 502 || http.statusCode() == 503 || http.statusCode() == 504))
+                return true;
             if (cause instanceof java.net.SocketTimeoutException) return true;
         }
         return false;
     }
+
     public static String code(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause instanceof HttpException http) {

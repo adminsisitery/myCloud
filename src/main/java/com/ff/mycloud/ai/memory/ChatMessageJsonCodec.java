@@ -13,6 +13,7 @@ import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,14 +21,15 @@ import java.util.List;
  * ChatMessage 列表 ↔ JSON 双向序列化。
  * <p>
  * 参照 LC4j 官方 PersistentChatMemoryStore 示例，将完整消息列表
- *（含工具调用/结果）序列化为 JSON 存储，保证工具循环中模型能看到
+ * （含工具调用/结果）序列化为 JSON 存储，保证工具循环中模型能看到
  * 自己的工具调用历史。
  */
 final class ChatMessageJsonCodec {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    private ChatMessageJsonCodec() {}
+    private ChatMessageJsonCodec() {
+    }
 
     // ==================== 序列化 ====================
 
@@ -132,7 +134,8 @@ final class ChatMessageJsonCodec {
         try {
             String t = msg.singleText();
             if (t != null && !t.isBlank()) return t;
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         try {
             for (dev.langchain4j.data.message.Content c : msg.contents()) {
                 if (c instanceof dev.langchain4j.data.message.TextContent tc) {
@@ -140,7 +143,8 @@ final class ChatMessageJsonCodec {
                     if (t != null && !t.isBlank()) return t;
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return msg.toString();
     }
 

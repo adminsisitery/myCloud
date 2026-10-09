@@ -59,15 +59,15 @@ public class FileUploadTaskServiceImpl implements FileUploadTaskService {
         String taskId = UUID.randomUUID().toString();
         String originalFilename = file == null ? "unknown" : file.getOriginalFilename();
         long fileSize = file == null ? 0L : file.getSize();
-        // 创建上传任务进度记录
-        upLoadProgressService.createUploadTask(taskId, originalFilename, fileSize);
+        Long currentUserId = UserContext.getCurrentUserId();
+        // 创建上传任务进度记录（带上 userId，超时扫描才能代为归还预占空间）
+        upLoadProgressService.createUploadTask(taskId, originalFilename, fileSize, currentUserId);
 
         if (file == null || file.isEmpty()) {
             upLoadProgressService.completeUploadTask(taskId, false, "文件为空");
             return Result.error("文件为空");
         }
 
-        Long currentUserId = UserContext.getCurrentUserId();
         // 校验用户是否存在
         UserCenter userCenter = userCenterMapperService.getByUserId(currentUserId);
         if (userCenter == null) {
@@ -80,6 +80,10 @@ public class FileUploadTaskServiceImpl implements FileUploadTaskService {
             upLoadProgressService.completeUploadTask(taskId, false, "用户可用空间不足");
             return Result.error("用户可用空间不足");
         }
+        // 预占成功：把「这笔额度还没结清」写进任务快照。
+        // 不能只看 status —— 用户取消会把任务置成终态 CANCELLED，而归还依赖异步线程，
+        // 线程从未执行时状态就再也表达不出「还欠一笔额度」这件事，超时扫描也会跳过终态。
+        upLoadProgressService.markSpaceReserved(taskId);
 
         File tmpFile = null;
         try {

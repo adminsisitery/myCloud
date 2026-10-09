@@ -29,6 +29,9 @@ public class UploadProgressRedis {
     /** Redis Key前缀 */
     public static final String UPLOAD_PROGRESS_PREFIX = "upload_progress:";
 
+    /** 任务更新锁的 Key 后缀（与任务同前缀，扫描时必须排除） */
+    public static final String KEY_SUFFIX_LOCK = ":lock";
+
     private final RedissonClient redisson;
 
     /**
@@ -81,7 +84,7 @@ public class UploadProgressRedis {
      * @return 更新函数的返回值，任务不存在返回null
      */
     public <T> T updateTask(String taskId, Function<UploadTask, T> updater) {
-        RLock lock = redisson.getLock(getKey(taskId) + ":lock");
+        RLock lock = redisson.getLock(getKey(taskId) + KEY_SUFFIX_LOCK);
         lock.lock();
         try {
             UploadTask task = getTask(taskId);
@@ -119,13 +122,21 @@ public class UploadProgressRedis {
     /**
      * 扫描所有上传任务ID
      * <p>基于Redis SCAN命令，不阻塞Redis服务。</p>
+     * <p>注意：{@code updateTask} 的分布式锁 key 与任务同前缀（{@code upload_progress:{taskId}:lock}），
+     * 会被 {@code upload_progress:*} 的模式一并命中。锁 key 是 Hash 类型，对它执行
+     * {@code RBucket.get()}（即 GET）会因类型不符报错，足以让整个扫描任务中断，
+     * 所以在返回前必须把这些 key 排除掉。</p>
      *
      * @return 所有上传任务ID列表
      */
     public List<String> scanAllTaskIds() {
         List<String> taskIds = new ArrayList<>();
         for (String key : redisson.getKeys().getKeysByPattern(UPLOAD_PROGRESS_PREFIX + "*")) {
-            taskIds.add(key.substring(UPLOAD_PROGRESS_PREFIX.length()));
+            String taskId = key.substring(UPLOAD_PROGRESS_PREFIX.length());
+            if (taskId.endsWith(KEY_SUFFIX_LOCK)) {
+                continue;
+            }
+            taskIds.add(taskId);
         }
         return taskIds;
     }

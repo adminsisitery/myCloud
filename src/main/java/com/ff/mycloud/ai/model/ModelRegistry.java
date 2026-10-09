@@ -4,10 +4,12 @@ import com.ff.mycloud.ai.config.AIProperties;
 import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.springframework.stereotype.Component;
 
 /**
@@ -52,7 +54,8 @@ public class ModelRegistry {
                     .listeners(listeners)
                     .build());
         }
-        if (!chatModels.containsKey(defaultModelName)) throw new IllegalArgumentException("ai.default-model is not registered");
+        if (!chatModels.containsKey(defaultModelName))
+            throw new IllegalArgumentException("ai.default-model is not registered");
     }
 
     private void register(AIProperties.ModelConfig cfg, List<ChatModelListener> listeners) {
@@ -105,11 +108,14 @@ public class ModelRegistry {
 
     public String requireModelName(String name) {
         String resolved = resolveName(name);
-        if (!chatModels.containsKey(resolved)) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "不支持的模型");
+        if (!chatModels.containsKey(resolved))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "不支持的模型");
         return resolved;
     }
 
-    /** 所有可用模型名（给前端下拉框） */
+    /**
+     * 所有可用模型名（给前端下拉框）
+     */
     public List<String> availableModels() {
         return List.copyOf(streamingModels.keySet());
     }

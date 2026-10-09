@@ -30,7 +30,21 @@ public class UpLoadProgressService {
      * @param size             文件大小（字节）
      */
     public void createUploadTask(String taskId, String originalFilename, long size) {
-        uploadProgressRedis.createTask(new UploadTask(taskId, originalFilename, size));
+        createUploadTask(taskId, originalFilename, size, null);
+    }
+
+    /**
+     * 创建上传任务（带用户ID）
+     * <p>userId 会随任务一起写入 Redis。异步线程若已消失（JVM 重启、线程池拒绝等），
+     * 超时扫描任务只能从任务快照里取 userId 才能代为归还预占空间。</p>
+     *
+     * @param taskId           任务唯一标识
+     * @param originalFilename 原始文件名
+     * @param size             文件大小（字节）
+     * @param userId           任务所属用户ID
+     */
+    public void createUploadTask(String taskId, String originalFilename, long size, Long userId) {
+        uploadProgressRedis.createTask(new UploadTask(taskId, originalFilename, size, userId));
     }
 
     /**
@@ -160,6 +174,51 @@ public class UpLoadProgressService {
             return true;
         });
         return Boolean.TRUE.equals(marked);
+    }
+
+    /**
+     * 回滚「空间已释放」标记（归还动作失败时调用）
+     * <p>归还动作是在锁外执行的：tryMarkSpaceReleased 返回 true 的那一刻标记已落库。
+     * 若随后的 releaseSpace 失败，标记必须回滚，否则后续每一次重试都会被
+     * tryMarkSpaceReleased 挡回 false —— 空间永久漏还，且不会有任何告警。</p>
+     *
+     * @param taskId 任务ID
+     */
+    public void unmarkSpaceReleased(String taskId) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            task.setSpaceReleased(false);
+            return null;
+        });
+    }
+
+    /**
+     * 标记该任务已成功预占额度
+     * <p>在 reserveSpace 返回成功之后调用。标记的意义是让「还没结清的预占」这件事
+     * 变成任务快照里的一个显式字段，不再需要从 status 去推断 —— 因为取消会把状态
+     * 置成终态 CANCELLED，而释放却依赖异步线程，线程从未执行时状态就失去了表达力。</p>
+     *
+     * @param taskId 任务ID
+     */
+    public void markSpaceReserved(String taskId) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            task.setSpaceReserved(true);
+            return null;
+        });
+    }
+
+    /**
+     * 结清预占：该任务不再有「待归还的额度」
+     * <p>两种情况调用：① 文件已落库，预占正式转为真实占用；② 额度已归还。</p>
+     * <p>结清之后超时扫描不会再碰它，避免把一笔已经成立的实际占用当成漏还退回去
+     * —— 那是资损方向（文件在、额度却退了）。</p>
+     *
+     * @param taskId 任务ID
+     */
+    public void clearSpaceReserved(String taskId) {
+        uploadProgressRedis.updateTask(taskId, task -> {
+            task.setSpaceReserved(false);
+            return null;
+        });
     }
 
     /**

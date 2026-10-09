@@ -154,6 +154,63 @@ class UploadTimeoutTaskTest {
         verify(upLoadProgressService, never()).completeUploadTask(anyString(), anyBoolean(), anyString());
     }
 
+    // ==================== 未结清预占（spaceReserved）====================
+
+    @Test
+    @DisplayName("CANCELLED 但预占未结清（线程从未执行）→ 代为归还空间")
+    void shouldReleaseSpaceForCancelledTaskWithUnsettledReservation() {
+        // 这一条正是「只看 status 会漏掉」的场景：用户取消把任务置成终态，
+        // 而释放只由持有上传权的异步线程负责，线程从未执行 → 状态是终态、归还从未发生。
+        UploadTask uploadTask = buildTask("task-cancel-1", UploadTaskStatus.CANCELLED,
+                NOW - TIMEOUT_MS - 60000);
+        uploadTask.setUserId(9L);
+        uploadTask.setSpaceReserved(true);
+
+        when(uploadProgressRedis.scanAllTaskIds()).thenReturn(List.of("task-cancel-1"));
+        when(uploadProgressRedis.getTask("task-cancel-1")).thenReturn(uploadTask);
+        when(upLoadProgressService.tryMarkSpaceReleased("task-cancel-1")).thenReturn(true);
+
+        task.scanTimeoutTasks();
+
+        verify(userCenterMapperService).releaseSpace(9L, uploadTask.getTotalSize());
+        verify(upLoadProgressService).completeUploadTask(eq("task-cancel-1"), eq(false), anyString());
+    }
+
+    @Test
+    @DisplayName("CANCELLED 且已归还 → 扫描跳过，不重复处理")
+    void shouldSkipCancelledTaskWhoseSpaceAlreadyReleased() {
+        UploadTask uploadTask = buildTask("task-cancel-2", UploadTaskStatus.CANCELLED,
+                NOW - TIMEOUT_MS - 60000);
+        uploadTask.setUserId(9L);
+        uploadTask.setSpaceReserved(true);
+        uploadTask.setSpaceReleased(true);
+
+        when(uploadProgressRedis.scanAllTaskIds()).thenReturn(List.of("task-cancel-2"));
+        when(uploadProgressRedis.getTask("task-cancel-2")).thenReturn(uploadTask);
+
+        task.scanTimeoutTasks();
+
+        verify(userCenterMapperService, never()).releaseSpace(anyLong(), anyLong());
+        verify(upLoadProgressService, never()).completeUploadTask(anyString(), anyBoolean(), anyString());
+    }
+
+    @Test
+    @DisplayName("SUCCESS 任务即使残留预占标记 → 也不归还（文件已落库，退了就是资损）")
+    void shouldNeverRefundSuccessfulTaskEvenIfMarkerLeftBehind() {
+        UploadTask uploadTask = buildTask("task-ok", UploadTaskStatus.SUCCESS,
+                NOW - TIMEOUT_MS - 60000);
+        uploadTask.setUserId(9L);
+        uploadTask.setSpaceReserved(true);
+
+        when(uploadProgressRedis.scanAllTaskIds()).thenReturn(List.of("task-ok"));
+        when(uploadProgressRedis.getTask("task-ok")).thenReturn(uploadTask);
+
+        task.scanTimeoutTasks();
+
+        verify(userCenterMapperService, never()).releaseSpace(anyLong(), anyLong());
+        verify(upLoadProgressService, never()).completeUploadTask(anyString(), anyBoolean(), anyString());
+    }
+
     // ==================== 边界场景 ====================
 
     @Test

@@ -6,6 +6,7 @@ import dev.langchain4j.model.chat.listener.ChatModelErrorContext;
 import dev.langchain4j.model.chat.listener.ChatModelListener;
 import dev.langchain4j.model.chat.listener.ChatModelRequestContext;
 import dev.langchain4j.model.chat.listener.ChatModelResponseContext;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -119,7 +121,9 @@ public class LangfuseChatModelListener implements ChatModelListener {
 
     // ==================== 私有方法 ====================
 
-    /** 获取或创建当前请求的 Trace ID */
+    /**
+     * 获取或创建当前请求的 Trace ID
+     */
     private String getOrCreateTraceId() {
         RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
         if (attrs != null) {
@@ -154,9 +158,9 @@ public class LangfuseChatModelListener implements ChatModelListener {
     }
 
     private Map<String, Object> generationCreateEvent(String genId, String traceId, String model,
-                                                        String input, String output,
-                                                        Instant startTime, Instant endTime,
-                                                        int inputTokens, int outputTokens) {
+                                                      String input, String output,
+                                                      Instant startTime, Instant endTime,
+                                                      int inputTokens, int outputTokens) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", genId);
         body.put("traceId", traceId);
@@ -182,7 +186,7 @@ public class LangfuseChatModelListener implements ChatModelListener {
     }
 
     private Map<String, Object> errorGenerationEvent(String genId, String traceId, String model,
-                                                      String input, String errorMsg) {
+                                                     String input, String errorMsg) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", genId);
         body.put("traceId", traceId);
@@ -205,7 +209,9 @@ public class LangfuseChatModelListener implements ChatModelListener {
     // --- HTTP 发送 ---
 
     @jakarta.annotation.PreDestroy
-    public void close() { executor.shutdownNow(); }
+    public void close() {
+        executor.shutdownNow();
+    }
 
     private void postToLangfuse(Object body) {
         executor.submit(() -> {
