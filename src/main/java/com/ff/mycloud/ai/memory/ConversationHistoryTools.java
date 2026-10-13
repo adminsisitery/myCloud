@@ -6,7 +6,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Identity/scope are captured by the server; the model cannot provide SQL or user/conversation IDs.
+ * 对话历史工具
  */
 public class ConversationHistoryTools {
     private final ConversationMemoryRepository repository;

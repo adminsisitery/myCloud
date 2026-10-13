@@ -143,6 +143,7 @@ final class ChatMessageJsonCodec {
                     if (t != null && !t.isBlank()) return t;
                 }
             }
+
         } catch (Exception ignored) {
         }
         return msg.toString();
