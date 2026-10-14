@@ -1,0 +1,46 @@
+server:
+  port: ${GATEWAY_PORT:8090}
+spring:
+  application:
+    name: gateway
+  main:
+    web-application-type: reactive
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+    gateway:
+      routes:
+        - id: mycloud-backend
+          uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
+          predicates:
+            - Path=/**
+sa-token:
+  token-name: Authorization
+  token-prefix: ""
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: false
+  is-share: false
+  is-read-header: true
+  is-read-body: false
+  is-read-cookie: false
+  is-log: false
+pan:
+  user:
+    exclude-paths:
+      - /api/user/login
+      - /api/user/register
+      - /api/user/verification-code
+      - /api/shares/**
+      - /api/auth/github/**
+      - /swagger-ui/**
+      - /v3/api-docs
+      - /v3/api-docs/**
+      - /swagger-resources/**
+      - /error
