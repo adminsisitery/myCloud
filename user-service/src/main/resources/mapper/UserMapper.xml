@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  用户服务的用户表 SQL。
+  表名沿用现有库结构（t_user / sys_user_role / sys_role），
+  数据库暂时与单体共库，后续按服务拆 schema 时只需改这里的连接配置。
+-->
+<mapper namespace="com.cloudrive.userService.mapper.UserMapper">
+
+    <insert id="setUserRole">
+        INSERT INTO sys_user_role (user_id, role_id) VALUES (#{userId}, #{roleId})
+    </insert>
+
+    <update id="updateUserRole">
+        UPDATE sys_user_role SET role_id = #{roleId} WHERE user_id = #{userId}
+    </update>
+
+    <select id="selectRoleCodeByUserId" resultType="java.lang.String">
+        SELECT r.role_code
+        FROM sys_user_role ur
+                 LEFT JOIN sys_role r ON ur.role_id = r.id
+        WHERE ur.user_id = #{userId}
+    </select>
+
+</mapper>

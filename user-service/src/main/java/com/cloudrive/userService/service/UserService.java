@@ -1,9 +1,9 @@
 package com.cloudrive.userService.service;
 
 
-import com.cloudrive.pan_common.constant.CommonConstants;
 import com.cloudrive.userService.domain.dto.LoginDTO;
 import com.cloudrive.userService.domain.dto.RegisterDTO;
+import com.cloudrive.userService.domain.po.UserRole;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -64,5 +64,5 @@ public interface UserService {
      *
      * @param userRole 用户角色实体
      */
-    void changeUserRole(CommonConstants.UserRole userRole);
+    void changeUserRole(UserRole userRole);
 }

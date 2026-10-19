@@ -3,12 +3,10 @@ package com.cloudrive.userService.controller;
 
 
 import com.cloudrive.pan_common.annotation.RateLimit;
+import com.cloudrive.pan_common.result.Result;
 import com.cloudrive.userService.domain.dto.ChangePasswordDTO;
-import com.cloudrive.userService.domain.po.Result;
 import com.cloudrive.userService.domain.po.UserCenter;
-import com.cloudrive.userService.mapper.UserCenterMapper;
 import com.cloudrive.userService.service.UserCenterService;
-import com.cloudrive.userService.service.UserMapperService;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -27,20 +25,14 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/user")
 public class UserCenterController {
 
-    UserMapperService userMapperService;
-    UserCenterMapper userCenterMapper;
-    UserCenterService userCenterService;
+    private final UserCenterService userCenterService;
 
     /**
-     * 构造器注入用户相关服务依赖
+     * 构造器注入用户中心服务。
      *
-     * @param userMapperService 用户 Mapper 服务
-     * @param userCenterMapper  用户中心 Mapper
      * @param userCenterService 用户中心服务
      */
-    public UserCenterController(UserMapperService userMapperService, UserCenterMapper userCenterMapper, UserCenterService userCenterService) {
-        this.userMapperService = userMapperService;
-        this.userCenterMapper = userCenterMapper;
+    public UserCenterController(UserCenterService userCenterService) {
         this.userCenterService = userCenterService;
     }
 

@@ -2,11 +2,11 @@ package com.cloudrive.userService.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.cloudrive.pan_common.annotation.RateLimit;
-import com.cloudrive.pan_common.constant.CommonConstants;
 import com.cloudrive.pan_common.result.Result;
 import com.cloudrive.userService.domain.dto.EmailSendDTO;
 import com.cloudrive.userService.domain.dto.LoginDTO;
 import com.cloudrive.userService.domain.dto.RegisterDTO;
+import com.cloudrive.userService.domain.po.UserRole;
 import com.cloudrive.userService.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
@@ -117,7 +117,7 @@ public class UserController {
     @SaCheckRole("admin")
     @PostMapping("/changeRole")
     @RateLimit(dimensions = { RateLimit.Dimension.USER }, permitsPerSecond = 2.0, timeout = 500)
-    public Result<Void> changeRole(@RequestBody CommonConstants.UserRole userRole){
+    public Result<Void> changeRole(@RequestBody UserRole userRole){
        userService.changeUserRole(userRole);
        return Result.success();
     }

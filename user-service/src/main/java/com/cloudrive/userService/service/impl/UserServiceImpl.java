@@ -1,160 +1,149 @@
 package com.cloudrive.userService.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
-import com.ff.mycloud.common.constant.CommonConstants;
-import com.ff.mycloud.common.constant.FileConstant;
-import com.ff.mycloud.common.util.*;
-import com.ff.mycloud.enums.ErrorCode;
-import com.ff.mycloud.mapper.UserCenterMapper;
-import com.ff.mycloud.model.dto.LoginDTO;
-import com.ff.mycloud.model.dto.RegisterDTO;
-import com.ff.mycloud.model.entity.User;
-import com.ff.mycloud.model.entity.UserCenter;
-import com.ff.mycloud.model.entity.UserRole;
-import com.ff.mycloud.redis.LoginFailRedis;
-import com.ff.mycloud.redis.VerificationCodeRedis;
-import com.ff.mycloud.service.UserCenterMapperService;
-import com.ff.mycloud.service.UserMapperService;
-import com.ff.mycloud.service.UserService;
-import com.ff.mycloud.service.impl.UserMapperServiceImpl;
+import com.cloudrive.pan_common.constant.CommonConstants;
+import com.cloudrive.pan_common.constant.FileConstant;
+import com.cloudrive.pan_common.enums.ErrorCode;
+import com.cloudrive.pan_common.util.EmailUtil;
+import com.cloudrive.pan_common.util.ExceptionUtil;
+import com.cloudrive.pan_common.util.IpUtil;
+import com.cloudrive.pan_common.util.PasswordUtil;
+import com.cloudrive.pan_common.util.UserContext;
+import com.cloudrive.userService.convert.UserCenterConverter;
+import com.cloudrive.userService.domain.dto.LoginDTO;
+import com.cloudrive.userService.domain.dto.RegisterDTO;
+import com.cloudrive.userService.domain.po.User;
+import com.cloudrive.userService.domain.po.UserCenter;
+import com.cloudrive.userService.domain.po.UserRole;
+import com.cloudrive.userService.redis.LoginFailRedis;
+import com.cloudrive.userService.redis.VerificationCodeRedis;
+import com.cloudrive.userService.service.UserCenterMapperService;
+import com.cloudrive.userService.service.UserMapperService;
+import com.cloudrive.userService.service.UserService;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.Random;
 
-import static com.ff.mycloud.enums.ErrorCode.*;
+import static com.cloudrive.pan_common.enums.ErrorCode.ACCOUNT_DISABLED;
+import static com.cloudrive.pan_common.enums.ErrorCode.ACCOUNT_LOCKED;
+import static com.cloudrive.pan_common.enums.ErrorCode.EMAIL_EXISTS;
+import static com.cloudrive.pan_common.enums.ErrorCode.INVALID_PASSWORD;
+import static com.cloudrive.pan_common.enums.ErrorCode.USERNAME_EXISTS;
+import static com.cloudrive.pan_common.enums.ErrorCode.USER_NOT_FOUND;
+import static com.cloudrive.pan_common.enums.ErrorCode.VERIFICATION_CODE_ERROR;
 
 /**
- * 用户服务实现类
- * <p>提供用户登录、注册、登出、角色管理等核心业务逻辑。
- * 登录采用三层防护机制（限流、IP计数、账户渐进退避+硬锁），
- * 注册包含验证码校验、用户创建、空间初始化和角色绑定。</p>
+ * 用户服务实现类。
+ * <p>
+ * 登录采用三层防护（限流 → IP 维度计数 → 账户维度渐进退避 + 硬锁）；
+ * 注册包含验证码校验、用户创建、空间初始化与角色绑定。
+ * </p>
  *
  * @author 飞飞
  * @date 2026/1/11
- * @version 1.0
  */
-
 @Service
 public class UserServiceImpl implements UserService {
 
-    private final UserMapperServiceImpl userMapperServiceImpl;
-    Logger logger = LoggerFactory.getLogger(UserServiceImpl.class);
-    UserMapperService userMapperService;
-    VerificationCodeRedis verificationCodeRedis;
-    UserCenterMapperService userCenterMapperService;
-    UserCenterMapper userCenterMapper;
-    LoginFailRedis loginFailRedis;
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
-    public UserServiceImpl(VerificationCodeRedis verificationCodeRedis,
-                           UserCenterMapper userCenterMapper,
-                           UserMapperService userMapperService,
+    /** 验证码取值范围：100000 ~ 999999，共 6 位 */
+    private static final int CODE_ORIGIN = 100_000;
+    private static final int CODE_BOUND = 900_000;
+
+    private final SecureRandom random = new SecureRandom();
+
+    private final UserMapperService userMapperService;
+    private final UserCenterMapperService userCenterMapperService;
+    private final UserCenterConverter userCenterConverter;
+    private final VerificationCodeRedis verificationCodeRedis;
+    private final LoginFailRedis loginFailRedis;
+
+    public UserServiceImpl(UserMapperService userMapperService,
                            UserCenterMapperService userCenterMapperService,
-                           UserMapperServiceImpl userMapperServiceImpl,
+                           UserCenterConverter userCenterConverter,
+                           VerificationCodeRedis verificationCodeRedis,
                            LoginFailRedis loginFailRedis) {
-        this.verificationCodeRedis = verificationCodeRedis;
         this.userMapperService = userMapperService;
         this.userCenterMapperService = userCenterMapperService;
-        this.userMapperServiceImpl = userMapperServiceImpl;
-        this.userCenterMapper = userCenterMapper;
+        this.userCenterConverter = userCenterConverter;
+        this.verificationCodeRedis = verificationCodeRedis;
         this.loginFailRedis = loginFailRedis;
     }
 
     /**
-     * 用户登录
-     * <p>三层防护：@RateLimit 限流 → IP维度计数 → 账户维度渐进退避+硬锁。
-     * 执行流程：
-     * 1. 获取客户端IP
-     * 2. 查询用户是否存在（用于获取userId做账户维度计数）
-     * 3. 双维度Lua原子判断是否已被锁定
-     * 4. 验证用户名存在性
-     * 5. 验证密码正确性
-     * 6. 验证账号状态
-     * 7. 登录成功：清除失败记录，签发token</p>
+     * 用户登录。
+     * <p>
+     * 失败计数先按 {@code userId = -1} 记在 IP 维度，密码校验失败时再用真实 userId 补记账户维度，
+     * 这样用户名不存在与密码错误对外表现一致，不会泄露账号是否注册。
+     * </p>
      *
-     * @param loginDTO 登录请求参数（用户名和密码）
-     * @return 登录成功返回的token
+     * @param loginDTO 登录参数
+     * @return Sa-Token 令牌
      */
     @Override
     public String login(LoginDTO loginDTO) {
-        logger.debug("开始处理登录请求");
-
         String ip = IpUtil.getClientIp();
 
-        // ① 先查用户是否存在（用于获取 userId 做账户维度计数）
-        Optional<User> users = userMapperService.findByUsername(loginDTO.getUsername());
-        Long userId = users.map(User::getId).orElse(-1L);
+        Optional<User> found = userMapperService.findByUsername(loginDTO.getUsername());
+        Long userId = found.map(User::getId).orElse(-1L);
 
-        // ② 检查是否已被锁（双维度 Lua 原子判断）
         long[] status = loginFailRedis.recordAndCheck(userId, ip);
         if (status[0] == 1) {
-            logger.warn("登录被拦截：userId={}, ip={}, failCount={}", userId, ip, status[1]);
+            log.warn("登录被拦截: userId={}, ip={}, failCount={}", userId, ip, status[1]);
             ExceptionUtil.throwBizException(ACCOUNT_LOCKED);
         }
 
-        // ③ 用户名不存在：已用 -1 计入 IP 维度，不暴露用户是否存在
-        if (!users.isPresent()) {
-            logger.warn("登录失败: reason=user_not_found");
+        if (found.isEmpty()) {
+            log.warn("登录失败: reason=user_not_found");
             ExceptionUtil.throwBizException(USER_NOT_FOUND);
         }
-        User user = users.get();
+        User user = found.get();
 
-        // ④ 验证密码：失败时用真实 userId 取代 -1 再记一次 用户存在的情况
         if (!PasswordUtil.matches(loginDTO.getPassword(), user.getPassword())) {
-            loginFailRedis.recordAndCheck(user.getId(), ip); // 覆盖 -1 的计数
-            logger.warn("登录失败: reason=invalid_password, userId={}", user.getId());
+            loginFailRedis.recordAndCheck(user.getId(), ip);
+            log.warn("登录失败: reason=invalid_password, userId={}", user.getId());
             ExceptionUtil.throwBizException(INVALID_PASSWORD);
         }
 
-        // ⑤ 验证状态
-        if (user.getStatus() != 1) {
-            logger.warn("登录失败: reason=account_disabled, userId={}", user.getId());
+        if (user.getStatus() == null || user.getStatus() != 1) {
+            log.warn("登录失败: reason=account_disabled, userId={}", user.getId());
             ExceptionUtil.throwBizException(ACCOUNT_DISABLED);
         }
 
-        // ⑥ 登录成功，清除失败记录
         loginFailRedis.reset(user.getId(), ip);
 
-        // 签发token并登录
         StpUtil.login(user.getId());
-        String token = StpUtil.getTokenValue();
-        logger.info("登录成功: userId={}", user.getId());
-        return token;
+        log.info("登录成功: userId={}", user.getId());
+        return StpUtil.getTokenValue();
     }
 
     /**
-     * 用户注册
-     * <p>注册流程：
-     * 1. 检查用户名和邮箱是否已被注册
-     * 2. 校验邮箱验证码
-     * 3. 创建用户记录
-     * 4. 初始化用户中心信息（空间配额）
-     * 5. 绑定默认角色</p>
+     * 注册：校验用户名/邮箱唯一 → 校验验证码 → 建用户 → 初始化配额 → 绑定默认角色。
      *
-     * @param registerDTO 注册请求参数
+     * @param registerDTO 注册参数
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void register(RegisterDTO registerDTO) {
-        //查看用户是否注册
         ExceptionUtil.throwIf(userMapperService.findByUsername(registerDTO.getUsername()).isPresent(),
                 USERNAME_EXISTS);
-
-        //查看邮箱是否注册
         ExceptionUtil.throwIf(userMapperService.findByEmail(registerDTO.getEmail()).isPresent(),
                 EMAIL_EXISTS);
-        //验证码验证
-        String verificationCode = verificationCodeRedis.getVerificationCode(registerDTO.getEmail());
-        if (!verificationCode.equals(registerDTO.getCode())) {
-            logger.warn("注册验证码校验失败");
+
+        String cachedCode = verificationCodeRedis.getVerificationCode(registerDTO.getEmail());
+        if (cachedCode == null || !cachedCode.equals(registerDTO.getCode())) {
+            log.warn("注册验证码校验失败");
             ExceptionUtil.throwBizException(VERIFICATION_CODE_ERROR);
         }
 
-        //创建用户
         User user = new User();
         user.setUsername(registerDTO.getUsername());
         user.setPassword(PasswordUtil.encode(registerDTO.getPassword()));
@@ -162,97 +151,82 @@ public class UserServiceImpl implements UserService {
         user.setStatus(1);
         user.setCreateTime(LocalDateTime.now());
         user.setUpdateTime(LocalDateTime.now());
-
         userMapperService.save(user);
-        //redis删除验证码
-        verificationCodeRedis.deleteVerificationCode(user.getEmail());
 
-        //创建完用户保存信息到userCenter表同时
-        UserCenter userCenter = userCenterMapper.UserToUserCenter(user, FileConstant.BASE_SIZE,FileConstant.MAX_SIZE);
+        verificationCodeRedis.deleteVerificationCode(registerDTO.getEmail());
+
+        UserCenter userCenter = userCenterConverter.toUserCenter(user, FileConstant.BASE_SIZE, FileConstant.MAX_SIZE);
         userCenterMapperService.save(userCenter);
 
-        //为用户绑定角色
         addRole(user.getId(), CommonConstants.UserRole.USER_ID);
-        logger.info("注册成功: userId={}", user.getId());
+        log.info("注册成功: userId={}", user.getId());
     }
 
     /**
-     * 发送邮箱验证码
-     * <p>流程：检查邮箱是否已被注册 -> 生成6位数字验证码 -> 发送邮件 -> 存入Redis。</p>
+     * 发送注册验证码。
      *
-     * @param email 目标邮箱地址
+     * @param email 目标邮箱
      */
     @Override
     public void sendVerificationCode(@NotBlank @Email String email) {
-        //检查邮箱是否注册
-        Optional<User> userByEmail = userMapperService.findByEmail(email);
-        if (userByEmail.isPresent()) {
-            logger.warn("验证码发送拒绝: reason=email_exists");
+        if (userMapperService.findByEmail(email).isPresent()) {
+            log.warn("验证码发送拒绝: reason=email_exists");
             ExceptionUtil.throwBizException(EMAIL_EXISTS);
         }
 
-        //生成6位数字验证码
-        int i = 10000 + new Random().nextInt(900000);
-        String code = String.valueOf(i);
-
-        //发送验证码
-        boolean success = EmailUtil.sendVerificationCode(email, code);
-        if (!success) {
-            logger.error("注册验证码邮件发送失败");
+        String code = String.valueOf(CODE_ORIGIN + random.nextInt(CODE_BOUND));
+        if (!EmailUtil.sendVerificationCode(email, code)) {
+            log.error("注册验证码邮件发送失败");
             ExceptionUtil.throwBizException(ErrorCode.EMAIL_SEND_ERROR);
         }
 
-        //保存到redis
         verificationCodeRedis.saveVerificationCode(email, code);
-        logger.info("注册验证码发送完成");
+        log.info("注册验证码发送完成");
     }
 
     /**
-     * 用户登出
-     * <p>校验当前用户是否已登录，已登录则执行Sa-Token登出。</p>
+     * 当前用户登出。
      */
     @Override
     public void logout() {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN);
         Long userId = UserContext.getCurrentUserId();
         StpUtil.logout();
-        logger.info("登出成功: userId={}", userId);
+        log.info("登出成功: userId={}", userId);
     }
 
     /**
-     * 强制下线指定用户
-     * <p>用于管理员踢出指定用户，需要操作者已登录。</p>
+     * 强制指定用户下线（管理员）。
      *
-     * @param userId 要强制下线的用户ID
+     * @param userId 目标用户 ID
      */
     @Override
     public void forceLogout(Long userId) {
         ExceptionUtil.throwIf(!StpUtil.isLogin(), ErrorCode.USER_NOT_LOGGED_IN, "操作者未登录");
-        // 强制指定用户下线
         StpUtil.logout(userId);
-        logger.info("强制下线完成: targetUserId={}", userId);
+        log.info("强制下线完成: targetUserId={}", userId);
     }
 
     /**
-     * 为用户添加角色
+     * 为用户绑定角色。
      *
-     * @param userId 用户ID
-     * @param roleId 角色ID
+     * @param userId 用户 ID
+     * @param roleId 角色 ID
      */
     @Override
     public void addRole(Long userId, Long roleId) {
-        userMapperService.SetUserRole(userId,roleId);
-        logger.info("添加角色完成: userId={}, roleId={}", userId, roleId);
+        userMapperService.setUserRole(userId, roleId);
+        log.info("添加角色完成: userId={}, roleId={}", userId, roleId);
     }
 
     /**
-     * 修改用户角色
+     * 修改用户角色（管理员）。
      *
-     * @param userRole 用户角色实体
+     * @param userRole 用户与角色的关联
      */
     @Override
     public void changeUserRole(UserRole userRole) {
-        userMapperService.updataUserRole(userRole);
-        logger.info("用户角色修改完成");
+        userMapperService.updateUserRole(userRole);
+        log.info("用户角色修改完成: userId={}, roleId={}", userRole.getUserId(), userRole.getRoleId());
     }
 }

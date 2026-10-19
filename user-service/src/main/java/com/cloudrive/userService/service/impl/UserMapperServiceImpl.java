@@ -3,6 +3,7 @@ package com.cloudrive.userService.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cloudrive.userService.domain.po.User;
 import com.cloudrive.userService.domain.po.UserRole;
+import com.cloudrive.userService.mapper.UserMapper;
 import com.cloudrive.userService.service.UserMapperService;
 import org.springframework.stereotype.Service;
 
@@ -10,44 +11,37 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 用户 Mapper 服务实现类
- * <p>基于MyBatis-Plus实现用户表的数据库操作，包括查询（按用户名、邮箱、ID、GitHub ID）
- * 和角色管理（更新角色、设置角色、查询角色）等功能。</p>
+ * 用户表的领域服务实现，底层是 {@link UserMapper}（MyBatis-Plus BaseMapper）。
  *
  * @author 飞飞
  * @date 2026/2/28
- * @version 1.0
  */
-
 @Service
 public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> implements UserMapperService {
 
     /**
-     * 更新用户角色
-     * <p>保护机制：普通用户ID和管理员ID不可被修改角色。</p>
+     * 覆盖用户已有角色。
+     * <p>
+     * 说明：原实现用 {@code CommonConstants.UserRole.USER_ID / ADMIN_ID} 与 {@code userId} 比较，
+     * 但这两个常量表示的是「角色 ID」，不是「用户 ID」，判断语义是错的，会导致绝大多数请求被直接 return。
+     * 这里先改为只做空值保护，把权限校验留给 {@code @SaCheckRole("admin")} 在上层完成。
+     * </p>
      *
-     * @param userRole 用户角色实体
+     * @param userRole 用户与角色的关联
      */
     @Override
-    public void updataUserRole(UserRole userRole) {
+    public void updateUserRole(UserRole userRole) {
         Long userId = userRole.getUserId();
         Long roleId = userRole.getRoleId();
-        // 保护管理员和普通用户的默认角色不被修改
-        if (roleId!= CommonConstants.UserRole.USER_ID && userId!= CommonConstants.UserRole.ADMIN_ID){
+        if (userId == null || roleId == null) {
             return;
         }
-        baseMapper.updateUserRole(userId,roleId);
+        baseMapper.updateUserRole(userId, roleId);
     }
 
-    /**
-     * 根据用户名查找用户（空值安全）
-     *
-     * @param username 用户名
-     * @return 用户实体Optional，不存在或用户名为空时返回empty
-     */
     @Override
     public Optional<User> findByUsername(String username) {
-        if (username == null || username.trim().isEmpty()) {
+        if (username == null || username.isBlank()) {
             return Optional.empty();
         }
         return lambdaQuery()
@@ -55,15 +49,9 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
                 .oneOpt();
     }
 
-    /**
-     * 根据邮箱查找用户（空值安全）
-     *
-     * @param email 邮箱地址
-     * @return 用户实体Optional，不存在或邮箱为空时返回empty
-     */
     @Override
     public Optional<User> findByEmail(String email) {
-        if (email == null || email.trim().isEmpty()) {
+        if (email == null || email.isBlank()) {
             return Optional.empty();
         }
         return lambdaQuery()
@@ -71,63 +59,33 @@ public class UserMapperServiceImpl extends ServiceImpl<UserMapper, User> impleme
                 .oneOpt();
     }
 
-    /**
-     * 根据用户ID查找用户
-     *
-     * @param id 用户ID
-     * @return 用户实体Optional
-     */
     @Override
     public Optional<User> findByUserId(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
         return lambdaQuery()
                 .eq(User::getId, id)
                 .oneOpt();
     }
 
-    /**
-     * 根据GitHub ID查找用户
-     *
-     * @param githubId GitHub用户ID
-     * @return 用户实体，不存在则返回null
-     */
     @Override
     public User findByGithubId(String githubId) {
-        return lambdaQuery().eq(User::getGithubId, githubId).one();
+        if (githubId == null || githubId.isBlank()) {
+            return null;
+        }
+        return lambdaQuery()
+                .eq(User::getGithubId, githubId)
+                .one();
     }
 
-    /**
-     * 获取用户的角色编码列表
-     *
-     * @param id 用户ID
-     * @return 角色编码列表
-     */
     @Override
     public List<String> getRoleById(long id) {
         return baseMapper.selectRoleCodeByUserId(id);
     }
 
-    /**
-     * 为用户设置角色
-     *
-     * @param userId 用户ID
-     * @param roleId 角色ID
-     */
     @Override
-    public void SetUserRole(Long userId, Long roleId) {
-        baseMapper.setUserRole(userId,roleId);
-    }
-
-
-
-    /**
-     * 根据用户ID查找单个用户（非Optional返回）
-     *
-     * @param id 用户ID
-     * @return 用户实体，不存在则返回null
-     */
-    public User findOneByUserId(Long id) {
-        return lambdaQuery()
-                .eq(User::getId, id)
-                .one();
+    public void setUserRole(Long userId, Long roleId) {
+        baseMapper.setUserRole(userId, roleId);
     }
 }

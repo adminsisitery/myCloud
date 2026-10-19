@@ -20,9 +20,9 @@ import java.time.LocalDateTime;
 @Data
 @TableName("user_center")
 public class UserCenter {
-    /** 主键，自增ID */
+    /** 主键，自增ID。使用包装类型 Long，避免 MyBatis-Plus 对原始类型主键的告警 */
     @TableId(type = IdType.AUTO)
-    private long id;
+    private Long id;
     /** 关联的用户ID */
     private long userId;
     /** 用户名 */

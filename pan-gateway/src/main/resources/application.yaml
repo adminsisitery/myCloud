@@ -16,6 +16,12 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
     gateway:
       routes:
+        # 用户身份相关接口已迁移到 user-service，走服务发现负载均衡
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/user/**
+        # 其余请求仍由单体承接，待文件服务拆出后再逐条收敛
         - id: mycloud-backend
           uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
           predicates:
