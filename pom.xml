@@ -13,6 +13,7 @@
     <modules>
         <module>pan-gateway</module>
         <module>user-service</module>
+        <module>pan-common</module>
     </modules>
 
     <parent>
