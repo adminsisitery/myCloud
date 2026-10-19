@@ -1,8 +1,8 @@
 package com.cloudrive.fileAsyncService.service;
 
-import com.cloudrive.fileAsyncService.model.entity.FileDocument;
 import com.cloudrive.fileAsyncService.model.entity.FileInfo;
 import com.cloudrive.fileAsyncService.mq.producer.RabbitMqService;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -56,14 +56,15 @@ public class FileIndexRebuilder {
      * @param text 重建文本
      */
     public void restoreKeywords(FileInfo file, String text) {
-        FileDocument document = new FileDocument();
-        document.setId(file.getId());
-        document.setUserId(file.getUserId());
+        FileIndexMessage message = new FileIndexMessage();
+        message.setId(file.getId());
+        message.setUserId(file.getUserId());
         String suffix = file.getFileSuffix() == null || file.getFileSuffix().isBlank()
                 ? ""
                 : "." + file.getFileSuffix();
-        document.setFileName(file.getFilename() + suffix);
-        document.setContent(text);
-        messages.sendInsertMessage(document);
+        message.setFileName(file.getFilename() + suffix);
+        message.setContent(text);
+        message.setFileType(file.getFileType());
+        messages.sendInsertMessage(message);
     }
 }

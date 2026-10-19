@@ -47,6 +47,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- MQ 生产端：重命名/删除/恢复后通知异步服务同步 ES/PG 索引与操作日志 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- 文件搜索：可选 Elasticsearch 策略（file.search=ES 时启用；默认 Mysql LIKE 无需 ES） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -2,8 +2,8 @@ package com.cloudrive.fileAsyncService.mq.consumer;
 
 import com.cloudrive.fileAsyncService.common.MqConstants;
 import com.cloudrive.fileAsyncService.common.util.EmailUtil;
-import com.cloudrive.fileAsyncService.model.entity.UsageMessage;
 import com.cloudrive.fileAsyncService.model.entity.User;
+import com.cloudrive.pan_common.domain.mq.UsageMessage;
 import com.cloudrive.fileAsyncService.repositorys.UserMapper;
 import com.cloudrive.fileAsyncService.ws.WsService;
 import lombok.RequiredArgsConstructor;

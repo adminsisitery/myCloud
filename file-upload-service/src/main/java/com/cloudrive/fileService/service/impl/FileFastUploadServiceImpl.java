@@ -6,9 +6,12 @@ import com.cloudrive.fileService.model.entity.FileCheck;
 import com.cloudrive.fileService.model.entity.FileInfo;
 import com.cloudrive.fileService.model.vo.FastUploadVO;
 import com.cloudrive.fileService.model.vo.FileCheckVO;
+import com.cloudrive.fileService.mq.MqProducer;
 import com.cloudrive.fileService.service.FileFastUploadService;
 import com.cloudrive.fileService.service.FileInfoMapperService;
 import com.cloudrive.fileService.service.UpLoadProgressService;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.result.Result;
 import com.cloudrive.pan_common.util.FileTypeUtil;
@@ -16,8 +19,10 @@ import com.cloudrive.pan_common.util.UserContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 文件秒传服务实现
@@ -48,13 +53,16 @@ public class FileFastUploadServiceImpl implements FileFastUploadService {
     private final FileInfoMapperService fileInfoMapperService;
     private final FileMapper fileMapper;
     private final UpLoadProgressService upLoadProgressService;
+    private final MqProducer mqProducer;
 
     public FileFastUploadServiceImpl(FileInfoMapperService fileInfoMapperService,
                                      FileMapper fileMapper,
-                                     UpLoadProgressService upLoadProgressService) {
+                                     UpLoadProgressService upLoadProgressService,
+                                     MqProducer mqProducer) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
         this.upLoadProgressService = upLoadProgressService;
+        this.mqProducer = mqProducer;
     }
 
     @Override
@@ -139,6 +147,7 @@ public class FileFastUploadServiceImpl implements FileFastUploadService {
         // ---- 6. 落库：防重名、分类都在 createReusedRecord 内完成 ----
         FileInfo newFileInfo = createReusedRecord(fileName, fileSize, existingFile, sha256Hash,
                 parentId, request.getTaskId(), currentUserId);
+        publishFastUploadSideEffects(newFileInfo);
 
         log.info("秒传成功：userId={}, fileId={}, filename={}, size={}",
                 currentUserId, newFileInfo.getId(), newFileInfo.getFilename(), fileSize);
@@ -180,6 +189,32 @@ public class FileFastUploadServiceImpl implements FileFastUploadService {
             upLoadProgressService.updateProgress(taskId, fileSize, fileSize);
         }
         return newFileInfo;
+    }
+
+    /**
+     * 秒传成功后的旁路消息：ES 索引 + 操作日志（物理对象未变，无需重建 PG 向量）。
+     */
+    private void publishFastUploadSideEffects(FileInfo fileInfo) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        String displayName = buildDisplayName(fileInfo);
+        try {
+            mqProducer.sendIndexInsert(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                    fileInfo.getUserId(), fileInfo.getFileType()));
+            mqProducer.sendLog(new OperationLogMessage(fileInfo.getUserId(), "UPLOAD", fileInfo.getId(),
+                    displayName, fileInfo.getFileSize(), null, null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            log.warn("秒传旁路消息发送失败（不影响秒传结果）: fileId={}", fileInfo.getId(), e);
+        }
+    }
+
+    private String buildDisplayName(FileInfo fileInfo) {
+        String suffix = fileInfo.getFileSuffix();
+        return (suffix == null || suffix.isEmpty())
+                ? fileInfo.getFilename()
+                : fileInfo.getFilename() + "." + suffix;
     }
 
     /**

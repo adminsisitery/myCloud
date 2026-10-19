@@ -43,6 +43,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
+        <!-- 上传成功后向 ES/PG/操作日志/用量通知队列投递消息（消费端在 file-async-service） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
 
         <!-- 持久层：Boot 3 必须用 mybatis-plus-spring-boot3-starter -->
         <dependency>

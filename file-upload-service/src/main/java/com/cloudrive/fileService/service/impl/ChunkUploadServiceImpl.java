@@ -10,6 +10,10 @@ import com.cloudrive.pan_common.enums.FileObjectStatus;
 import com.cloudrive.fileService.client.UserSpaceClient;
 import com.cloudrive.fileService.mapper.ChunkUploadMapper;
 import com.cloudrive.fileService.mapper.FileMapper;
+import com.cloudrive.fileService.mq.MqProducer;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import com.cloudrive.fileService.model.entity.*;
 import com.cloudrive.fileService.model.vo.ChunkCompleteVO;
 import com.cloudrive.fileService.model.vo.ChunkPartVO;
@@ -27,6 +31,7 @@ import org.redisson.api.RLock;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +48,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
     private final FileInfoMapperService fileInfoMapperService;
     private final FileMapper fileMapper;
     private final FileObjectMapper fileObjectMapper;
+    private final MqProducer mqProducer;
 
     public ChunkUploadServiceImpl(UserSpaceClient userSpaceClient,
                                    StorageServiceFactory storageServiceFactory,
@@ -50,7 +56,8 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
                                    ChunkUploadMapper chunkUploadMapper,
                                    FileInfoMapperService fileInfoMapperService,
                                    FileMapper fileMapper,
-                                   FileObjectMapper fileObjectMapper) {
+                                   FileObjectMapper fileObjectMapper,
+                                   MqProducer mqProducer) {
         this.userSpaceClient = userSpaceClient;
         this.storageServiceFactory = storageServiceFactory;
         this.chunkUploadRedis = chunkUploadRedis;
@@ -58,6 +65,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
         this.fileObjectMapper = fileObjectMapper;
+        this.mqProducer = mqProducer;
     }
 
     @Override
@@ -270,7 +278,10 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
         fileObjectMapper.createFileObject(fileObject);
 
-        // 8. 清理 Redis
+        // 8. 投递旁路消息：ES 索引 + PG 向量（rebuild=true，由异步服务从 OSS 提取文本）+ 操作日志
+        publishSideEffects(fileInfo, originalFilename);
+
+        // 9. 清理 Redis
         chunkUploadRedis.deleteTask(uploadId);
 
         log.info("分片合并完成，等待事务提交: userId={}, uploadId={}, fileId={}, fileSize={}",
@@ -279,6 +290,27 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         return Result.success(new ChunkCompleteVO(
                 fileInfo.getId(), originalFilename,
                 task.getFileSize(), objectKey, suffix));
+    }
+
+    /**
+     * 分片合并成功后的旁路消息：ES 索引 + PG 向量（rebuild=true）+ 操作日志。
+     * <p>旁路消息失败不影响分片合并结果。</p>
+     */
+    private void publishSideEffects(FileInfo fileInfo, String displayName) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        try {
+            mqProducer.sendIndexInsert(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                    fileInfo.getUserId(), fileInfo.getFileType()));
+            mqProducer.sendPgInsert(new PgIndexMessage(fileInfo.getId(), fileInfo.getUserId(),
+                    null, fileInfo.getSha256Hash(), true));
+            mqProducer.sendLog(new OperationLogMessage(fileInfo.getUserId(), "UPLOAD", fileInfo.getId(),
+                    displayName, fileInfo.getFileSize(), null, null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            log.warn("分片上传旁路消息发送失败（不影响上传结果）: fileId={}", fileInfo.getId(), e);
+        }
     }
 
     @Override

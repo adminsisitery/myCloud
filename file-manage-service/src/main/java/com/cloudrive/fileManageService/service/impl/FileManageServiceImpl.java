@@ -4,10 +4,13 @@ import com.cloudrive.fileManageService.mapper.FileMapper;
 import com.cloudrive.fileManageService.model.entity.FileInfo;
 import com.cloudrive.fileManageService.model.entity.FileObject;
 import com.cloudrive.fileManageService.model.vo.FileListVO;
+import com.cloudrive.fileManageService.mq.MqProducer;
 import com.cloudrive.fileManageService.repositorys.FileObjectMapper;
 import com.cloudrive.fileManageService.repositorys.FileRecentAccess;
 import com.cloudrive.fileManageService.service.FileInfoMapperService;
 import com.cloudrive.fileManageService.service.FileManageService;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.enums.FileObjectStatus;
 import com.cloudrive.pan_common.result.Result;
@@ -22,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,15 +54,18 @@ public class FileManageServiceImpl implements FileManageService {
     private final FileMapper fileMapper;
     private final FileObjectMapper fileObjectMapper;
     private final FileRecentAccess fileRecentAccess;
+    private final MqProducer mqProducer;
 
     public FileManageServiceImpl(FileInfoMapperService fileInfoMapperService,
                                  FileMapper fileMapper,
                                  FileObjectMapper fileObjectMapper,
-                                 FileRecentAccess fileRecentAccess) {
+                                 FileRecentAccess fileRecentAccess,
+                                 MqProducer mqProducer) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileMapper = fileMapper;
         this.fileObjectMapper = fileObjectMapper;
         this.fileRecentAccess = fileRecentAccess;
+        this.mqProducer = mqProducer;
     }
 
     /**
@@ -179,6 +186,7 @@ public class FileManageServiceImpl implements FileManageService {
             fileInfoMapperService.updateById(fileInfo);
         }
         logger.info("重命名成功: fileId={}, {} -> {}", fileId, oldName, filename);
+        publishRenameSideEffects(fileInfo);
         return Result.success("重命名成功");
     }
 
@@ -256,6 +264,7 @@ public class FileManageServiceImpl implements FileManageService {
         Long currentUserId = UserContext.getCurrentUserId();
         FileInfo source = fileInfoMapperService.findByIdAndUserId(fileId, currentUserId);
         ExceptionUtil.throwIfNull(source, ErrorCode.FILE_NOT_FOUND);
+        List<FileInfo> copiedFiles = new ArrayList<>();
 
         if (Boolean.TRUE.equals(source.getIsFolder())) {
             String oldPrefix = normalizeDirectory(source.getLocalFilePath());
@@ -276,6 +285,7 @@ public class FileManageServiceImpl implements FileManageService {
             }
             newRoot.setLocalFilePath(newRootPath);
             fileInfoMapperService.save(newRoot);
+            copiedFiles.add(newRoot);
             Long newRootId = newRoot.getId();
 
             for (FileInfo child : children) {
@@ -295,6 +305,7 @@ public class FileManageServiceImpl implements FileManageService {
                     newChild.setParentId(newRootId);
                 }
                 fileInfoMapperService.save(newChild);
+                copiedFiles.add(newChild);
             }
         } else {
             String copyName = resolveCopyName(source.getFilename(), source.getFileSuffix(),
@@ -302,11 +313,42 @@ public class FileManageServiceImpl implements FileManageService {
             FileInfo copyFile = cloneFileInfo(source);
             copyFile.setFilename(copyName);
             fileInfoMapperService.save(copyFile);
+            copiedFiles.add(copyFile);
             FileObject fileObject = fileMapper.toFileObject(copyFile, FileObjectStatus.AVAILABLE);
             fileObjectMapper.createFileObject(fileObject);
         }
         logger.info("复制成功: sourceFileId={}", fileId);
+        publishCopySideEffects(copiedFiles);
         return Result.success("复制成功");
+    }
+
+    /** 重命名旁路消息：ES 更新 + 操作日志（失败仅记日志，不影响重命名结果）。 */
+    private void publishRenameSideEffects(FileInfo fileInfo) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        String displayName = buildFullName(fileInfo);
+        try {
+            mqProducer.sendIndexUpdate(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                    fileInfo.getUserId(), fileInfo.getFileType()));
+            mqProducer.sendLog(new OperationLogMessage(fileInfo.getUserId(), "RENAME", fileInfo.getId(),
+                    displayName, fileInfo.getFileSize(), null, null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            logger.warn("重命名旁路消息发送失败（不影响重命名结果）: fileId={}", fileInfo.getId(), e);
+        }
+    }
+
+    /** 复制旁路消息：为新复制的文件投递 ES 插入（物理对象复用，无需重建 PG 向量）。 */
+    private void publishCopySideEffects(List<FileInfo> copiedFiles) {
+        for (FileInfo copied : copiedFiles) {
+            try {
+                mqProducer.sendIndexInsert(new FileIndexMessage(copied.getId(), buildFullName(copied), null,
+                        copied.getUserId(), copied.getFileType()));
+            } catch (RuntimeException e) {
+                logger.warn("复制旁路消息发送失败（不影响复制结果）: fileId={}", copied.getId(), e);
+            }
+        }
     }
 
     /**

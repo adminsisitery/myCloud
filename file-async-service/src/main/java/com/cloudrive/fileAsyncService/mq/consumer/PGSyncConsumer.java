@@ -2,9 +2,9 @@ package com.cloudrive.fileAsyncService.mq.consumer;
 
 import com.cloudrive.fileAsyncService.common.MqConstants;
 import com.cloudrive.fileAsyncService.model.entity.FileInfo;
-import com.cloudrive.fileAsyncService.model.entity.PgSender;
 import com.cloudrive.fileAsyncService.service.FileIndexRebuilder;
 import com.cloudrive.fileAsyncService.service.FileInfoMapperService;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.embedding.Embedding;
@@ -30,6 +30,7 @@ import static dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metad
 /**
  * PG 向量同步消费者（移植单体 PGSyncConsumer）
  * <p>
+ * 消息体使用 pan-common 中的共享类 PgIndexMessage。
  * 插入：以 DB 实时数据为准做归属/删除/内容 hash 校验，删除过期向量后重建；
  * 删除：延迟删除消息到达时若文件仍有效（例如回收站已恢复），跳过删除。
  * 重试耗尽后由 Broker 的 DLX policy 转入死信队列。
@@ -50,7 +51,7 @@ public class PGSyncConsumer {
 
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 5000))
     @RabbitListener(queues = MqConstants.Pg.INSERT_QUEUE)
-    public void handleInsert(PgSender message) {
+    public void handleInsert(PgIndexMessage message) {
         if (message == null) {
             return;
         }
@@ -114,7 +115,7 @@ public class PGSyncConsumer {
 
     @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 5000))
     @RabbitListener(queues = MqConstants.Pg.DELETE_QUEUE)
-    public void handleDelete(PgSender message) {
+    public void handleDelete(PgIndexMessage message) {
         if (message == null) {
             return;
         }
@@ -130,7 +131,7 @@ public class PGSyncConsumer {
         });
     }
 
-    private void withLock(PgSender message, Runnable action) {
+    private void withLock(PgIndexMessage message, Runnable action) {
         if (message.getFileId() == null || message.getUserId() == null) {
             throw new IllegalArgumentException("索引身份缺失");
         }
@@ -152,7 +153,7 @@ public class PGSyncConsumer {
         }
     }
 
-    private boolean ownedLive(FileInfo file, PgSender message) {
+    private boolean ownedLive(FileInfo file, PgIndexMessage message) {
         return file != null
                 && !Boolean.TRUE.equals(file.getIsDeleted())
                 && message.getUserId() != null

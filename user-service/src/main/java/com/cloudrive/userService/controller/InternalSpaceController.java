@@ -1,7 +1,10 @@
 package com.cloudrive.userService.controller;
 
+import com.cloudrive.pan_common.domain.user.SpaceUsage;
 import com.cloudrive.pan_common.result.Result;
+import com.cloudrive.userService.domain.po.UserCenter;
 import com.cloudrive.userService.service.UserCenterMapperService;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -56,6 +59,21 @@ public class InternalSpaceController {
                                 @RequestParam("size") Long size) {
         userCenterMapperService.releaseSpace(userId, size);
         return Result.success();
+    }
+
+    /**
+     * 查询用户空间用量（供 file-upload-service 判断是否触发用量提醒）。
+     *
+     * @param userId 用户ID
+     * @return 已用空间与总配额
+     */
+    @GetMapping("/info")
+    public Result<SpaceUsage> info(@RequestParam("userId") Long userId) {
+        UserCenter userCenter = userCenterMapperService.getByUserId(userId);
+        if (userCenter == null) {
+            return Result.error(404, "用户空间信息不存在");
+        }
+        return Result.success(new SpaceUsage(userCenter.getUsedSpace(), userCenter.getTotalSpace()));
     }
 
     /**

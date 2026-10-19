@@ -1,8 +1,12 @@
 package com.cloudrive.fileService.client;
 
-import com.cloudrive.pan_common.exceotion.BusinessException;
+import com.cloudrive.pan_common.domain.user.SpaceUsage;
 import com.cloudrive.pan_common.enums.ErrorCode;
+import com.cloudrive.pan_common.exceotion.BusinessException;
+import com.cloudrive.pan_common.result.Result;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -11,13 +15,14 @@ import org.springframework.web.client.RestClientException;
  * 用户空间服务客户端。
  * <p>
  * 空间配额（usedSpace/totalSpace）的归属在用户服务，文件服务不再直接写用户中心的表，
- * 而是通过 HTTP 调用 user-service 的内部接口完成"预占/释放"两个原子操作。
+ * 而是通过 HTTP 调用 user-service 的内部接口完成"预占/释放/查询"操作。
  * 两个服务注册到同一个 Nacos，生产环境可按需替换为服务发现 + 负载均衡。
  * </p>
  *
  * @author 飞飞
  * @date 2026/10/19
  */
+@Slf4j
 @Component
 public class UserSpaceClient {
 
@@ -68,6 +73,29 @@ public class UserSpaceClient {
                     .toBodilessEntity();
         } catch (RestClientException e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "空间服务不可用，请稍后重试");
+        }
+    }
+
+    /**
+     * 查询用户空间用量（用于上传成功后判断是否触发用量提醒）。
+     * <p>旁路能力：查询失败只记日志返回 null，不影响上传主流程。</p>
+     *
+     * @param userId 用户ID
+     * @return 空间用量；查询失败返回 null
+     */
+    public SpaceUsage getSpaceUsage(long userId) {
+        try {
+            Result<SpaceUsage> resp = restClient.get()
+                    .uri(uriBuilder -> uriBuilder.path("/internal/space/info")
+                            .queryParam("userId", userId)
+                            .build())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Result<SpaceUsage>>() {
+                    });
+            return resp == null ? null : resp.getData();
+        } catch (RestClientException e) {
+            log.warn("查询用户空间用量失败，跳过用量通知: userId={}", userId, e);
+            return null;
         }
     }
 

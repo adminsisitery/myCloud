@@ -4,6 +4,7 @@ import com.cloudrive.fileService.client.UserSpaceClient;
 import com.cloudrive.fileService.mapper.FileMapper;
 import com.cloudrive.fileService.model.entity.FileInfo;
 import com.cloudrive.fileService.model.entity.FileObject;
+import com.cloudrive.fileService.mq.MqProducer;
 import com.cloudrive.fileService.repositorys.FileObjectMapper;
 import com.cloudrive.fileService.service.FileInfoMapperService;
 import com.cloudrive.fileService.service.FileUploadAsyncService;
@@ -11,6 +12,11 @@ import com.cloudrive.fileService.service.StorageService;
 import com.cloudrive.fileService.service.StorageServiceFactory;
 import com.cloudrive.fileService.service.UpLoadProgressService;
 import com.cloudrive.pan_common.constant.CommonConstants;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
+import com.cloudrive.pan_common.domain.mq.UsageMessage;
+import com.cloudrive.pan_common.domain.user.SpaceUsage;
 import com.cloudrive.pan_common.enums.FileObjectStatus;
 import com.cloudrive.pan_common.util.FileHashUtil;
 import com.cloudrive.pan_common.util.FileTypeUtil;
@@ -20,7 +26,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.File;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 普通文件异步上传服务实现
@@ -29,6 +37,11 @@ import java.util.List;
  * {@code FileServiceImpl#uploadFileWithProgressFromPath} 的上传关键路径，
  * 保留了同样的行为：哈希命中当前用户已有文件 -> 秒传；否则先推 OSS 再落台账，
  * 落库失败清理孤儿对象；成功/失败都把预占额度结清（转真实占用或归还）。
+ * </p>
+ * <p>
+ * 上传成功后会向 file-async-service 投递旁路消息：ES 索引、PG 向量（rebuild=true，
+ * 消费端从 OSS 重建文本）、操作日志、以及空间使用率超过 90% 时的用量提醒。
+ * 消息发送失败不影响上传结果。
  * </p>
  *
  * @author 飞飞
@@ -45,6 +58,7 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
     private final FileInfoMapperService fileInfoMapperService;
     private final FileObjectMapper fileObjectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final MqProducer mqProducer;
 
     public FileUploadAsyncServiceImpl(UpLoadProgressService upLoadProgressService,
                                       UserSpaceClient userSpaceClient,
@@ -52,7 +66,8 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
                                       FileMapper fileMapper,
                                       FileInfoMapperService fileInfoMapperService,
                                       FileObjectMapper fileObjectMapper,
-                                      TransactionTemplate transactionTemplate) {
+                                      TransactionTemplate transactionTemplate,
+                                      MqProducer mqProducer) {
         this.upLoadProgressService = upLoadProgressService;
         this.userSpaceClient = userSpaceClient;
         this.storageServiceFactory = storageServiceFactory;
@@ -60,6 +75,7 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileObjectMapper = fileObjectMapper;
         this.transactionTemplate = transactionTemplate;
+        this.mqProducer = mqProducer;
     }
 
     @Async("fileUploadExecutor")
@@ -77,7 +93,8 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
             upLoadProgressService.markUploading(taskId);
             log.info("普通上传开始: taskId={}, userId={}, fileSize={}", taskId, currentUserId, fileSize);
 
-            uploadFile(fileType, tmpFile, originalFilename, fileSize, parentId, taskId, currentUserId);
+            FileInfo uploaded = uploadFile(fileType, tmpFile, originalFilename, fileSize, parentId, taskId, currentUserId);
+            publishUploadSideEffects(uploaded);
 
             // 文件已落库：预占转为真实占用，先结清标记再置成功，避免超时扫描误解
             upLoadProgressService.clearSpaceReserved(taskId);
@@ -100,9 +117,11 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
 
     /**
      * 上传核心逻辑：秒传判定 -> 推 OSS（带进度）-> 落台账。
+     *
+     * @return 落库后的文件记录
      */
-    private void uploadFile(String fileType, File tmpFile, String originalFilename, long fileSize,
-                            Long parentId, String taskId, Long currentUserId) throws Exception {
+    private FileInfo uploadFile(String fileType, File tmpFile, String originalFilename, long fileSize,
+                                Long parentId, String taskId, Long currentUserId) throws Exception {
         if (tmpFile == null || !tmpFile.exists() || !tmpFile.isFile()) {
             throw new IllegalStateException("上传临时文件不存在或不是常规文件");
         }
@@ -112,9 +131,11 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
         // 秒传只允许复用「当前用户已经拥有过的文件」，不跨用户复用物理对象
         List<FileInfo> sameUserFiles = fileInfoMapperService.findByHashAndUserId(sha256Hash, currentUserId);
         if (!sameUserFiles.isEmpty()) {
-            handleFastUpload(originalFilename, fileSize, sameUserFiles.get(0), sha256Hash,
+            FileInfo reused = handleFastUpload(originalFilename, fileSize, sameUserFiles.get(0), sha256Hash,
                     parentId, taskId, currentUserId);
-            return;
+            // 秒传复用已有物理对象：只补 ES 索引 + 操作日志，不重复重建向量
+            publishFastUploadSideEffects(reused);
+            return reused;
         }
 
         String uploadPath = CommonConstants.File.FILE_PATH_PREFIX + currentUserId;
@@ -130,18 +151,22 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
         String localFilePath = resolveLocalFilePath(parentId, resolvedFilename, currentUserId);
 
         try {
-            Boolean saved = transactionTemplate.execute(status -> {
+            FileInfo saved = transactionTemplate.execute(status -> {
                 FileInfo fileInfo = fileMapper.toFileInfoFromPath(finalBaseName, objectKey, fileSize,
                         currentUserId, parentId, sha256Hash, finalSuffix, fileType, resolvedFilename, localFilePath);
                 fileInfo.setCategoryId(FileTypeUtil.getCategoryId(finalSuffix));
                 FileObject fileObject = fileMapper.toFileObject(fileInfo, FileObjectStatus.AVAILABLE);
                 fileInfoMapperService.save(fileInfo);
                 fileObjectMapper.createFileObject(fileObject);
-                return true;
+                return fileInfo;
             });
-            if (!Boolean.TRUE.equals(saved)) {
+            if (saved == null || saved.getId() == null) {
                 throw new IllegalStateException("文件信息保存失败");
             }
+            // PG 消息带 contentHash 与 rebuild=true，消费端从 OSS 重建文本，避免异步线程解析大文件
+            mqProducer.sendPgInsert(new PgIndexMessage(saved.getId(), currentUserId,
+                    null, sha256Hash, true));
+            return saved;
         } catch (Exception e) {
             log.error("文件信息落库失败，清理孤儿 OSS 对象: objectKey={}, taskId={}", objectKey, taskId, e);
             try {
@@ -155,9 +180,11 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
 
     /**
      * 秒传落库：复用已有物理对象的存储路径，只新增一条文件记录（不重复占 OSS 空间）。
+     *
+     * @return 新生成的文件记录
      */
-    private void handleFastUpload(String originalFilename, long fileSize, FileInfo existingFile,
-                                  String sha256Hash, Long parentId, String taskId, Long currentUserId) {
+    private FileInfo handleFastUpload(String originalFilename, long fileSize, FileInfo existingFile,
+                                      String sha256Hash, Long parentId, String taskId, Long currentUserId) {
         String[] nameParts = splitFilename(originalFilename);
         String[] resolved = resolveUploadNameConflict(nameParts[0], nameParts[1], parentId, currentUserId);
         String finalBaseName = resolved[0];
@@ -177,6 +204,72 @@ public class FileUploadAsyncServiceImpl implements FileUploadAsyncService {
             upLoadProgressService.updateProgress(taskId, fileSize, fileSize);
         }
         log.info("命中秒传，复用已有文件: taskId={}, userId={}, fileId={}", taskId, currentUserId, newFileInfo.getId());
+        return newFileInfo;
+    }
+
+    /**
+     * 上传成功后的旁路消息：ES 索引 + 操作日志 + 用量提醒。
+     */
+    private void publishUploadSideEffects(FileInfo fileInfo) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        String displayName = buildDisplayName(fileInfo);
+        mqProducer.sendIndexInsert(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                fileInfo.getUserId(), fileInfo.getFileType()));
+        sendOperationLog(fileInfo, displayName);
+        notifyUsageIfNeeded(fileInfo.getUserId());
+    }
+
+    /**
+     * 秒传成功后的旁路消息：ES 索引 + 操作日志（物理对象未变，无需重建 PG 向量）。
+     */
+    private void publishFastUploadSideEffects(FileInfo fileInfo) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        String displayName = buildDisplayName(fileInfo);
+        mqProducer.sendIndexInsert(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                fileInfo.getUserId(), fileInfo.getFileType()));
+        sendOperationLog(fileInfo, displayName);
+    }
+
+    private void sendOperationLog(FileInfo fileInfo, String displayName) {
+        mqProducer.sendLog(new OperationLogMessage(
+                fileInfo.getUserId(),
+                "UPLOAD",
+                fileInfo.getId(),
+                displayName,
+                fileInfo.getFileSize(),
+                null,
+                null,
+                UUID.randomUUID().toString(),
+                LocalDateTime.now()));
+    }
+
+    /**
+     * 空间使用率超过 90% 时投递用量提醒（消费端走 WebSocket + 邮件）。
+     */
+    private void notifyUsageIfNeeded(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        SpaceUsage usage = userSpaceClient.getSpaceUsage(userId);
+        if (usage == null || usage.totalSpace() <= 0) {
+            return;
+        }
+        long percent = usage.usedSpace() * 100 / usage.totalSpace();
+        if (percent >= 90) {
+            mqProducer.sendUsage(new UsageMessage(userId, usage.usedSpace(), usage.totalSpace(),
+                    "可用空间剩余不足10%，已用" + percent + "%"));
+        }
+    }
+
+    private String buildDisplayName(FileInfo fileInfo) {
+        String suffix = fileInfo.getFileSuffix();
+        return (suffix == null || suffix.isEmpty())
+                ? fileInfo.getFilename()
+                : fileInfo.getFilename() + "." + suffix;
     }
 
     /**

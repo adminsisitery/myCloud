@@ -12,6 +12,9 @@ import com.cloudrive.pan_common.util.UserContext;
 import com.cloudrive.fileService.config.properties.OssProProperties;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.enums.FileObjectStatus;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import com.cloudrive.fileService.mapper.FileMapper;
 import com.cloudrive.fileService.model.dto.DirectUploadInitDTO;
 import com.cloudrive.fileService.model.entity.DirectUploadTask;
@@ -26,10 +29,12 @@ import com.cloudrive.fileService.service.FileInfoMapperService;
 import com.cloudrive.fileService.service.StorageService;
 import com.cloudrive.fileService.service.StorageServiceFactory;
 import com.cloudrive.fileService.client.UserSpaceClient;
+import com.cloudrive.fileService.mq.MqProducer;
 import org.redisson.api.RLock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -47,13 +52,15 @@ public class DirectUploadServiceImpl implements DirectUploadService {
     private final FileMapper fileMapper;
     private final FileObjectMapper fileObjectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final MqProducer mqProducer;
 
     public DirectUploadServiceImpl(OssProProperties oss, DirectUploadRedis redis,
                                    UserSpaceClient userSpaceClient,
                                    FileInfoMapperService fileInfoService,
                                    StorageServiceFactory storageFactory,
                                    FileMapper fileMapper, FileObjectMapper fileObjectMapper,
-                                   TransactionTemplate transactionTemplate) {
+                                   TransactionTemplate transactionTemplate,
+                                   MqProducer mqProducer) {
         this.oss = oss;
         this.redis = redis;
         this.userSpaceClient = userSpaceClient;
@@ -62,6 +69,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
         this.fileMapper = fileMapper;
         this.fileObjectMapper = fileObjectMapper;
         this.transactionTemplate = transactionTemplate;
+        this.mqProducer = mqProducer;
     }
 
     @Override
@@ -134,6 +142,7 @@ public class DirectUploadServiceImpl implements DirectUploadService {
             FileInfo fileInfo = transactionTemplate.execute(status -> persistFile(task));
             if (fileInfo == null) throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "保存文件元数据失败");
             redis.delete(taskId);
+            publishSideEffects(fileInfo, task.getFileName());
             String suffix = suffixWithoutDot(task.getFileName());
             log.info("直传确认完成: userId={}, taskId={}, fileId={}, fileSize={}", task.getUserId(), taskId, fileInfo.getId(), task.getFileSize());
             return new ChunkCompleteVO(fileInfo.getId(), task.getFileName(), task.getFileSize(), task.getObjectKey(), suffix);
@@ -181,6 +190,27 @@ public class DirectUploadServiceImpl implements DirectUploadService {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 直传确认成功后的旁路消息：ES 索引 + PG 向量（rebuild=true，由异步服务从 OSS 提取文本）+ 操作日志。
+     * <p>旁路消息失败不影响直传确认结果。</p>
+     */
+    private void publishSideEffects(FileInfo fileInfo, String displayName) {
+        if (fileInfo == null || fileInfo.getId() == null) {
+            return;
+        }
+        try {
+            mqProducer.sendIndexInsert(new FileIndexMessage(fileInfo.getId(), displayName, null,
+                    fileInfo.getUserId(), fileInfo.getFileType()));
+            mqProducer.sendPgInsert(new PgIndexMessage(fileInfo.getId(), fileInfo.getUserId(),
+                    null, fileInfo.getSha256Hash(), true));
+            mqProducer.sendLog(new OperationLogMessage(fileInfo.getUserId(), "UPLOAD", fileInfo.getId(),
+                    displayName, fileInfo.getFileSize(), null, null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            log.warn("直传旁路消息发送失败（不影响直传结果）: fileId={}", fileInfo.getId(), e);
         }
     }
 

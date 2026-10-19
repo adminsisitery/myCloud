@@ -4,10 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.cloudrive.fileManageService.client.UserSpaceClient;
 import com.cloudrive.fileManageService.model.entity.FileInfo;
 import com.cloudrive.fileManageService.model.vo.TrashListVO;
+import com.cloudrive.fileManageService.mq.MqProducer;
 import com.cloudrive.fileManageService.repositorys.FileObjectMapper;
 import com.cloudrive.fileManageService.service.FileInfoMapperService;
 import com.cloudrive.fileManageService.service.RecycleBinService;
 import com.cloudrive.fileManageService.service.StorageService;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.result.Result;
 import com.cloudrive.pan_common.util.ExceptionUtil;
@@ -22,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -50,15 +55,18 @@ public class RecycleBinServiceImpl implements RecycleBinService {
     private final FileObjectMapper fileObjectMapper;
     private final UserSpaceClient userSpaceClient;
     private final StorageService storageService;
+    private final MqProducer mqProducer;
 
     public RecycleBinServiceImpl(FileInfoMapperService fileInfoMapperService,
                                  FileObjectMapper fileObjectMapper,
                                  UserSpaceClient userSpaceClient,
-                                 StorageService storageService) {
+                                 StorageService storageService,
+                                 MqProducer mqProducer) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.fileObjectMapper = fileObjectMapper;
         this.userSpaceClient = userSpaceClient;
         this.storageService = storageService;
+        this.mqProducer = mqProducer;
     }
 
     /**
@@ -88,6 +96,7 @@ public class RecycleBinServiceImpl implements RecycleBinService {
             }
             doSoftDelete(target, now);
         }
+        publishSoftDeleteSideEffects(targets);
         releaseSpace(currentUserId, totalSize);
         logger.info("软删除成功: fileId={}, affected={}, releasedBytes={}", fileId, targets.size(), totalSize);
         return Result.success("删除成功");
@@ -114,8 +123,10 @@ public class RecycleBinServiceImpl implements RecycleBinService {
         LocalDateTime now = LocalDateTime.now();
         long totalSize = 0L;
         int affected = 0;
+        List<FileInfo> allTargets = new ArrayList<>();
         for (FileInfo file : files) {
             List<FileInfo> targets = collectTargets(file, currentUserId);
+            allTargets.addAll(targets);
             for (FileInfo target : targets) {
                 if (!Boolean.TRUE.equals(target.getIsFolder()) && target.getFileSize() != null) {
                     totalSize += target.getFileSize();
@@ -124,6 +135,7 @@ public class RecycleBinServiceImpl implements RecycleBinService {
                 affected++;
             }
         }
+        publishSoftDeleteSideEffects(allTargets);
         releaseSpace(currentUserId, totalSize);
         logger.info("批量软删除成功: fileIds={}, affected={}, releasedBytes={}", idList, affected, totalSize);
         return Result.success("删除成功");
@@ -256,6 +268,7 @@ public class RecycleBinServiceImpl implements RecycleBinService {
                 restoredSize += target.getFileSize();
             }
         }
+        publishRestoreSideEffects(filesToRestore);
         if (restoredSize > 0) {
             userSpaceClient.addUsedSpace(currentUserId, restoredSize);
         }
@@ -279,8 +292,60 @@ public class RecycleBinServiceImpl implements RecycleBinService {
             }
             fileInfoMapperService.removeById(file.getId());
         }
+        publishCleanTrashSideEffects(trashFiles);
         logger.info("清空回收站完成: userId={}, count={}", currentUserId, trashFiles.size());
         return Result.success("清空回收站成功");
+    }
+
+    /** 软删除旁路消息：每个节点投递 ES 删除；普通文件额外投递 PG 删除与操作日志（失败仅 warn）。 */
+    private void publishSoftDeleteSideEffects(List<FileInfo> targets) {
+        for (FileInfo target : targets) {
+            String displayName = buildFullName(target);
+            try {
+                mqProducer.sendIndexDelete(new FileIndexMessage(target.getId(), displayName, null,
+                        target.getUserId(), target.getFileType()));
+                if (!Boolean.TRUE.equals(target.getIsFolder())) {
+                    mqProducer.sendPgDelete(new PgIndexMessage(target.getId(), target.getUserId(), null,
+                            target.getSha256Hash(), false));
+                    mqProducer.sendLog(new OperationLogMessage(target.getUserId(), "DELETE", target.getId(),
+                            displayName, target.getFileSize(), null, null,
+                            UUID.randomUUID().toString(), LocalDateTime.now()));
+                }
+            } catch (RuntimeException e) {
+                logger.warn("软删除旁路消息发送失败（不影响删除结果）: fileId={}", target.getId(), e);
+            }
+        }
+    }
+
+    /** 恢复旁路消息：每个节点投递 ES 插入；普通文件额外投递 PG 重建（失败仅 warn）。 */
+    private void publishRestoreSideEffects(List<FileInfo> targets) {
+        for (FileInfo target : targets) {
+            try {
+                mqProducer.sendIndexInsert(new FileIndexMessage(target.getId(), buildFullName(target), null,
+                        target.getUserId(), target.getFileType()));
+                if (!Boolean.TRUE.equals(target.getIsFolder())) {
+                    mqProducer.sendPgInsert(new PgIndexMessage(target.getId(), target.getUserId(), null,
+                            target.getSha256Hash(), true));
+                }
+            } catch (RuntimeException e) {
+                logger.warn("恢复旁路消息发送失败（不影响恢复结果）: fileId={}", target.getId(), e);
+            }
+        }
+    }
+
+    /** 清空回收站旁路消息：普通文件投递 PG 向量删除（ES 文档已在软删除时移除，失败仅 warn）。 */
+    private void publishCleanTrashSideEffects(List<FileInfo> trashFiles) {
+        for (FileInfo file : trashFiles) {
+            if (Boolean.TRUE.equals(file.getIsFolder())) {
+                continue;
+            }
+            try {
+                mqProducer.sendPgDelete(new PgIndexMessage(file.getId(), file.getUserId(), null,
+                        file.getSha256Hash(), false));
+            } catch (RuntimeException e) {
+                logger.warn("清空回收站旁路消息发送失败（不影响清空结果）: fileId={}", file.getId(), e);
+            }
+        }
     }
 
     /**
