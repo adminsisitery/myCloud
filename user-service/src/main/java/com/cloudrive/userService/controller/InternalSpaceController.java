@@ -57,4 +57,18 @@ public class InternalSpaceController {
         userCenterMapperService.releaseSpace(userId, size);
         return Result.success();
     }
+
+    /**
+     * 恢复用户已占用空间（回收站恢复文件时把空间占用加回来）。
+     * <p>与 reserve 不同，此操作不检查剩余空间，与原单体恢复逻辑保持一致。</p>
+     *
+     * @param userId 用户ID
+     * @param size   要恢复的空间大小（字节）
+     */
+    @PostMapping("/add")
+    public Result<Void> add(@RequestParam("userId") Long userId,
+                            @RequestParam("size") Long size) {
+        userCenterMapperService.addUsedSpace(userId, size);
+        return Result.success();
+    }
 }

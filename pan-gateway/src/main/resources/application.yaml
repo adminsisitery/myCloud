@@ -21,9 +21,7 @@ spring:
           uri: lb://user-service
           predicates:
             - Path=/api/user/**,/api/auth/github/**
-        # 上传链路（普通上传/秒传判定/秒传执行/分片/直传/进度）已拆到 file-upload-service；
-        # /api/files/progress、/api/files/check、/api/files/fast-upload 精确路由到上传服务，
-        # 其余 /api/files/**（列表/重命名/移动/分享等文件管理接口）仍由单体兜底
+        # 上传链路（普通上传/秒传判定/秒传执行/分片/直传/进度）拆到 file-upload-service
         - id: file-upload-service
           uri: lb://file-upload-service
           predicates:
@@ -33,7 +31,13 @@ spring:
           uri: lb://file-download-service
           predicates:
             - Path=/api/files/*/content
-        # 其余请求仍由单体承接，待文件服务拆出后再逐条收敛
+        # 文件/文件夹管理（列表/新建文件夹/重命名/移动/复制/收藏/最近访问/回收站）拆到 file-manage-service；
+        # 上传、下载的精确路由排在本路由之前，优先匹配
+        - id: file-manage-service
+          uri: lb://file-manage-service
+          predicates:
+            - Path=/api/files,/api/files/**,/api/file/folder
+        # 其余请求仍由单体承接（搜索/分享/预览/文件夹打包等），待后续拆分收敛
         - id: mycloud-backend
           uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
           predicates:

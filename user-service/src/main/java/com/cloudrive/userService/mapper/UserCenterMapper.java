@@ -49,4 +49,19 @@ public interface UserCenterMapper extends BaseMapper<UserCenter> {
             WHERE user_id = #{userId}
             """)
     int releaseSpace(@Param("userId") long userId, @Param("fileSize") long fileSize);
+
+    /**
+     * 恢复用户空间占用：从回收站恢复文件时把已用空间加回来。
+     * <p>与 reserveSpace 不同，此操作不检查剩余空间，保持与原单体恢复逻辑一致。</p>
+     *
+     * @param userId 用户 ID
+     * @param size   恢复的空间大小（字节）
+     * @return 受影响行数
+     */
+    @Update("""
+            UPDATE user_center
+            SET used_space = used_space + #{size}
+            WHERE user_id = #{userId}
+            """)
+    int addUsedSpace(@Param("userId") long userId, @Param("size") long size);
 }

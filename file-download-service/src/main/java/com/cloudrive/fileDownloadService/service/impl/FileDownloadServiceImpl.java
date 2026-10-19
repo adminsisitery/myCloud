@@ -1,6 +1,7 @@
 package com.cloudrive.fileDownloadService.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.cloudrive.fileDownloadService.client.ManageServiceClient;
 import com.cloudrive.fileDownloadService.model.entity.FileInfo;
 import com.cloudrive.fileDownloadService.model.vo.FileDownloadVO;
 import com.cloudrive.fileDownloadService.repositorys.FileInfoMapper;
@@ -18,7 +19,7 @@ import java.io.InputStream;
  * <p>
  * 从单体 {@code com.ff.mycloud.service.impl.FileServiceImpl#prepareDownload} 迁入：
  * 校验文件存在、归属当前用户、未被删除、不是文件夹，然后返回下载元信息。
- * 与单体的差异：新服务暂不记录“最近访问”（该功能仍在单体，待文件管理整体迁移时再引入）。
+ * 下载前通过 file-manage-service 内部接口写入最近访问记录（与原单体 recordAccess 行为一致）。
  * </p>
  *
  * @author 飞飞
@@ -31,10 +32,14 @@ public class FileDownloadServiceImpl implements FileDownloadService {
 
     private final FileInfoMapper fileInfoMapper;
     private final StorageService storageService;
+    private final ManageServiceClient manageServiceClient;
 
-    public FileDownloadServiceImpl(FileInfoMapper fileInfoMapper, StorageService storageService) {
+    public FileDownloadServiceImpl(FileInfoMapper fileInfoMapper,
+                                   StorageService storageService,
+                                   ManageServiceClient manageServiceClient) {
         this.fileInfoMapper = fileInfoMapper;
         this.storageService = storageService;
+        this.manageServiceClient = manageServiceClient;
     }
 
     @Override
@@ -52,6 +57,8 @@ public class FileDownloadServiceImpl implements FileDownloadService {
         if (Boolean.TRUE.equals(file.getIsFolder())) {
             throw new BusinessException(ErrorCode.CANNOT_DOWNLOAD_FOLDER);
         }
+        // 记录最近访问（内部接口失败不阻断下载）
+        manageServiceClient.recordAccess(currentUserId, fileId);
 
         String filename = file.getOriginalFilename();
         if (filename == null || filename.isBlank()) {

@@ -16,6 +16,7 @@
         <module>pan-gateway</module>
         <module>file-upload-service</module>
         <module>file-download-service</module>
+        <module>file-manage-service</module>
     </modules>
 
     <parent>

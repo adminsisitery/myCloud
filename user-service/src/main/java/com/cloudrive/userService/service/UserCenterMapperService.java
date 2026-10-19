@@ -37,4 +37,12 @@ public interface UserCenterMapperService extends IService<UserCenter> {
      * @return true表示空间预留成功，false表示空间不足
      */
     boolean reserveSpace(long userId, long fileSize);
+
+    /**
+     * 恢复用户已用空间（从回收站恢复文件时把空间占用加回来）
+     *
+     * @param userId 用户ID
+     * @param size   要恢复的空间大小（字节）
+     */
+    void addUsedSpace(Long userId, long size);
 }
