@@ -10,8 +10,6 @@ import com.ff.mycloud.model.entity.FileCheck;
 import com.ff.mycloud.model.vo.FastUploadVO;
 import com.ff.mycloud.model.vo.FileCheckVO;
 import com.ff.mycloud.model.vo.FileListVO;
-import com.ff.mycloud.model.vo.FileDownloadVO;
-import com.ff.mycloud.common.util.HttpRange;
 import com.ff.mycloud.service.DeleteFileService;
 import com.ff.mycloud.service.FileService;
 import com.ff.mycloud.service.FileUploadTaskService;

@@ -1,0 +1,79 @@
+server:
+  port: ${FILE_UPLOAD_SERVICE_PORT:8082}
+  shutdown: graceful
+  # 普通上传沿用单体的 100MB 上限（见单体 application-example.yml）；
+  # 分片上传的单片仍是前端约定的 5MB，这里只是全局请求体上限
+  max-http-request-header-size: 32KB
+
+spring:
+  application:
+    name: file-upload-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:mycloud}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 10000
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+# 与网关、user-service 共享同一份 Redis 会话
+sa-token:
+  token-name: Authorization
+  token-prefix: ""
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: false
+  is-share: false
+  is-read-header: true
+  is-read-body: false
+  is-read-cookie: false
+  is-log: false
+
+# 空间配额在 user-service，通过内部接口预占/释放
+user-service:
+  base-url: ${USER_SERVICE_URL:http://localhost:8081}
+
+# OSS 配置（与原单体 application.yml 中的 oss 前缀一致）
+oss:
+  enabled: ${OSS_ENABLED:false}
+  endpoint: ${OSS_ENDPOINT:}
+  access-key-id: ${OSS_ACCESS_KEY_ID:}
+  access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+  bucket-name: ${OSS_BUCKET_NAME:}
+  cdn-endpoint: ${OSS_CDN_ENDPOINT:}
+  # 直传 STS。role-arn 为空时直传接口自动不可用
+  sts:
+    region-id: ${OSS_STS_REGION_ID:cn-hangzhou}
+    role-arn: ${OSS_STS_ROLE_ARN:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

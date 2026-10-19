@@ -16,11 +16,18 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
     gateway:
       routes:
-        # 用户身份相关接口已迁移到 user-service，走服务发现负载均衡
+        # 用户身份与第三方登录同属用户域，统一走 user-service 的服务发现负载均衡
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/api/user/**
+            - Path=/api/user/**,/api/auth/github/**
+        # 上传链路（普通上传/秒传判定/秒传执行/分片/直传/进度）已拆到 file-upload-service；
+        # /api/files/progress、/api/files/check、/api/files/fast-upload 精确路由到文件服务，
+        # 其余 /api/files/**（列表/重命名/移动/分享等文件管理接口）仍由单体兜底
+        - id: file-upload-service
+          uri: lb://file-upload-service
+          predicates:
+            - Path=/api/chunk/**,/api/direct-upload/**,/api/upload-progress/**,/api/files/progress,/api/files/check,/api/files/fast-upload
         # 其余请求仍由单体承接，待文件服务拆出后再逐条收敛
         - id: mycloud-backend
           uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}

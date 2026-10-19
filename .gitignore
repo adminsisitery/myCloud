@@ -2,6 +2,10 @@
 # 本地开发请复制 application-example.yml 为 application.yml 后填入真实值
 application.yml
 local_application.yml
+# 例外：两个微服务的配置全部走环境变量占位符，不含任何真实密钥，
+# 必须随代码入库，否则别人拉下来构建出的 jar 没有配置、起不来
+!user-service/src/main/resources/application.yml
+!file-upload-service/src/main/resources/application.yml
 
 # ===== 构建产物 =====
 HELP.md

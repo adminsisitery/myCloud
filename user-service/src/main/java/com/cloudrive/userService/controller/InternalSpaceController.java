@@ -1,0 +1,60 @@
+package com.cloudrive.userService.controller;
+
+import com.cloudrive.pan_common.result.Result;
+import com.cloudrive.userService.service.UserCenterMapperService;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 空间配额内部接口。
+ * <p>
+ * 供 file-upload-service 等兄弟服务调用，完成"预占/释放"两个原子操作。
+ * 空间配额的归属在用户服务，其他服务不允许直接写用户中心表——
+ * 这是拆分时定下的数据归属边界。
+ * </p>
+ * <p>
+ * 安全说明：路径以 /internal 开头，网关没有对应路由，外部流量打不进来；
+ * 服务间直连只能发生在内网。后续如需加密，可加服务间鉴权。
+ * </p>
+ *
+ * @author 飞飞
+ * @date 2026/10/19
+ */
+@RestController
+@RequestMapping("/internal/space")
+public class InternalSpaceController {
+
+    private final UserCenterMapperService userCenterMapperService;
+
+    public InternalSpaceController(UserCenterMapperService userCenterMapperService) {
+        this.userCenterMapperService = userCenterMapperService;
+    }
+
+    /**
+     * 预占用户空间（原子检查并扣减可用空间）。
+     *
+     * @param userId 用户ID
+     * @param size   需要预留的空间大小（字节）
+     * @return true表示空间预留成功，false表示空间不足
+     */
+    @PostMapping("/reserve")
+    public Result<Boolean> reserve(@RequestParam("userId") Long userId,
+                                   @RequestParam("size") Long size) {
+        return Result.success(userCenterMapperService.reserveSpace(userId, size));
+    }
+
+    /**
+     * 释放用户已占用空间。
+     *
+     * @param userId 用户ID
+     * @param size   要释放的空间大小（字节）
+     */
+    @PostMapping("/release")
+    public Result<Void> release(@RequestParam("userId") Long userId,
+                                @RequestParam("size") Long size) {
+        userCenterMapperService.releaseSpace(userId, size);
+        return Result.success();
+    }
+}
