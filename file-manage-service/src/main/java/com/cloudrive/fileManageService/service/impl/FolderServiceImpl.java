@@ -14,8 +14,7 @@ import org.springframework.stereotype.Service;
 /**
  * 文件夹服务实现类
  * <p>
- * 新建文件夹逻辑从原单体 {@code FolderServiceImpl#createFolder} 迁移，
- * 校验规则（空名、长度、非法字符、同级重名、父目录归属）保持一致。
+ * 新建文件夹逻辑从原单体 {@code FolderServiceImpl#createFolder} 迁移。
  * </p>
  *
  * @author 飞飞
@@ -83,9 +82,9 @@ public class FolderServiceImpl implements FolderService {
     }
 
     /**
-     * 判断文件夹名是否包含 Windows 非法字符
+     * 判断文件名是否包含 Windows 非法字符
      *
-     * @param name 文件夹名
+     * @param name 文件名
      * @return true 表示含非法字符
      */
     private boolean hasIllegalCharacter(String name) {
@@ -104,9 +103,10 @@ public class FolderServiceImpl implements FolderService {
      * @return 规范化路径
      */
     private String normalizeDirectory(String path) {
-        if (path == null || path.isEmpty()) {
+        if (path == null) {
             return "";
         }
-        return path.endsWith("/") ? path : path + "/";
+        String normalized = path.replace('\\', '/');
+        return normalized.endsWith("/") ? normalized : normalized + "/";
     }
 }

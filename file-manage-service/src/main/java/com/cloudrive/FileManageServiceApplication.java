@@ -5,11 +5,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * 文件与文件夹管理微服务启动类
+ * 文件管理微服务启动类
  * <p>
- * 负责文件/文件夹元数据管理：列表、新建文件夹、重命名、移动、复制、收藏、
- * 最近访问与回收站（软删除/批量删除/恢复/彻底删除/清空）。
- * 上传与单文件下载分别由 file-upload-service、file-download-service 承担。
+ * 放在 com.cloudrive 根包下，确保能扫描到 pan-common 中的公共 Bean。
  * </p>
  *
  * @author 飞飞
@@ -19,11 +17,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan("com.cloudrive.fileManageService.repositorys")
 public class FileManageServiceApplication {
 
-    /**
-     * 服务入口
-     *
-     * @param args 启动参数
-     */
     public static void main(String[] args) {
         SpringApplication.run(FileManageServiceApplication.class, args);
     }

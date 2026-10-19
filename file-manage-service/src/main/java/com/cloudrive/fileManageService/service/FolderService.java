@@ -5,7 +5,7 @@ import com.cloudrive.pan_common.result.Result;
 /**
  * 文件夹服务接口
  * <p>
- * 目前仅包含新建文件夹；文件夹的列表/重命名/移动/复制/删除由
+ * 仅负责新建文件夹；文件夹的列表/重命名/移动/复制/删除由
  * {@link FileManageService}、{@link RecycleBinService} 统一处理。
  * </p>
  *

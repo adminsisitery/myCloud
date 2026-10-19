@@ -1,0 +1,25 @@
+package com.cloudrive.fileAsyncService.model.entity;
+
+import com.cloudrive.fileAsyncService.enums.FolderDownloadStatus;
+import lombok.Data;
+
+/**
+ * 文件夹异步打包任务（与单体 FolderDownloadTask 结构一致，存于共享 Redis）
+ */
+@Data
+public class FolderDownloadTask {
+    private String taskId;
+    private Long userId;
+    private Long folderId;
+    private String folderName;
+    private FolderDownloadStatus status;
+    private long totalBytes;
+    private long processedBytes;
+    private double progress;
+    private String objectKey;
+    private String message;
+    private boolean cancelRequested;
+    private long createdAt;
+    private long updatedAt;
+    private long expiresAt;
+}

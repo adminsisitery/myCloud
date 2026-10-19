@@ -31,13 +31,28 @@ spring:
           uri: lb://file-download-service
           predicates:
             - Path=/api/files/*/content
+        # 文件预览（OSS 预签名 URL，GET /api/files/preview/{fileId}）独立拆到 file-preview-service
+        - id: file-preview-service
+          uri: lb://file-preview-service
+          predicates:
+            - Path=/api/files/preview,/api/files/preview/**
         # 文件/文件夹管理（列表/新建文件夹/重命名/移动/复制/收藏/最近访问/回收站）拆到 file-manage-service；
-        # 上传、下载的精确路由排在本路由之前，优先匹配
+        # 上传、下载、预览的精确路由排在本路由之前，优先匹配
         - id: file-manage-service
           uri: lb://file-manage-service
           predicates:
             - Path=/api/files,/api/files/**,/api/file/folder
-        # 其余请求仍由单体承接（搜索/分享/预览/文件夹打包等），待后续拆分收敛
+        # 文件分享（创建/列表/取消/密码与Token校验/分享内容下载）拆到独立 file-share-service
+        - id: file-share
+          uri: lb://file-share-service
+          predicates:
+            - Path=/api/shares,/api/shares/**
+        # 实时用量通知 WebSocket（端点 /ws/message 由 file-async-service 提供，握手时由端点自行校验 token）
+        - id: file-async-service-ws
+          uri: lb://file-async-service
+          predicates:
+            - Path=/ws/message
+        # 其余请求仍由单体承接（AI 域/文件夹打包下载及任务接口等），待后续拆分收敛
         - id: mycloud-backend
           uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
           predicates:
@@ -61,6 +76,7 @@ pan:
       - /api/user/verification-code
       - /api/shares/**
       - /api/auth/github/**
+      - /ws/message
       - /swagger-ui/**
       - /v3/api-docs
       - /v3/api-docs/**

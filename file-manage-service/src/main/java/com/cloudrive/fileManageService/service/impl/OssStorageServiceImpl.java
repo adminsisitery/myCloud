@@ -9,10 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 阿里云 OSS 对象存储服务实现（删除最小集）
+ * 阿里云 OSS 对象存储服务实现
  * <p>
- * 从 file-upload-service 的 {@code OssStorageServiceImpl} 中裁剪出彻底删除回收站
- * 文件所需的部分：启用开关校验 + deleteObject + 客户端关闭。
+ * 文件管理服务仅使用删除能力：彻底删除回收站文件时清理物理对象。
  * </p>
  *
  * @author 飞飞

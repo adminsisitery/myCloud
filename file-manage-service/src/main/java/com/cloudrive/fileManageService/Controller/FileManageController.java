@@ -1,5 +1,6 @@
 package com.cloudrive.fileManageService.Controller;
 
+import com.cloudrive.fileManageService.handler.FileSearchHandler;
 import com.cloudrive.fileManageService.model.dto.FileRenameDTO;
 import com.cloudrive.fileManageService.model.dto.MoveFileDTO;
 import com.cloudrive.fileManageService.model.vo.FileListVO;
@@ -23,7 +24,8 @@ import java.util.List;
  * 文件/文件夹管理控制器
  * <p>
  * 接口路径、HTTP 方法与限流阈值与原单体 {@code FileController} 保持一致，
- * 前端无需改动。上传/下载/秒传/搜索接口不在本服务。
+ * 前端无需改动。上传/下载/秒传接口不在本服务；文件搜索在本服务内按
+ * {@code file.search} 策略（Mysql 默认 / ES）实现。
  * </p>
  *
  * @author 飞飞
@@ -34,9 +36,12 @@ import java.util.List;
 public class FileManageController {
 
     private final FileManageService fileManageService;
+    private final FileSearchHandler fileSearchHandler;
 
-    public FileManageController(FileManageService fileManageService) {
+    public FileManageController(FileManageService fileManageService,
+                                FileSearchHandler fileSearchHandler) {
         this.fileManageService = fileManageService;
+        this.fileSearchHandler = fileSearchHandler;
     }
 
     /**
@@ -144,5 +149,22 @@ public class FileManageController {
             permitsPerSecond = 10.0, timeout = 500)
     public Result<List<FileListVO>> listStarredFiles() {
         return Result.success(fileManageService.listStarredFiles());
+    }
+
+    /**
+     * 按关键词搜索当前用户的文件
+     * <p>
+     * 策略由 file.search 配置决定：Mysql（默认，数据库 LIKE）或 ES（Elasticsearch 索引）；
+     * 返回结构与原单体 GET /api/files/search 一致。
+     * </p>
+     *
+     * @param keyword 搜索关键词
+     * @return 匹配的文件列表
+     */
+    @GetMapping("/search")
+    @RateLimit(dimensions = {RateLimit.Dimension.USER},
+            permitsPerSecond = 5.0, timeout = 1000)
+    public Result<List<FileListVO>> searchFiles(@RequestParam("keyword") String keyword) {
+        return Result.success(fileSearchHandler.searchFiles(keyword));
     }
 }

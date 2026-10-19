@@ -47,6 +47,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- 文件搜索：可选 Elasticsearch 策略（file.search=ES 时启用；默认 Mysql LIKE 无需 ES） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
         <!-- 持久层：t_file_info / t_file_object / t_recent_access（Boot 3 必须用 boot3 starter） -->
         <dependency>
             <groupId>com.baomidou</groupId>
