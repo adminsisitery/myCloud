@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cloudrive.aiService.persistence.mapper.AiMessageMapper">
+
+    <select id="findByMsgId" resultType="com.cloudrive.aiService.persistence.entity.AiMessage">
+        SELECT * FROM t_ai_message WHERE conversation_id = #{memId} ORDER BY create_time ASC
+    </select>
+
+    <delete id="deleteByCId">
+        DELETE FROM t_ai_message WHERE conversation_id = #{CId}
+    </delete>
+
+    <select id="findLastAssistantId" resultType="java.lang.Long">
+        SELECT id FROM t_ai_message
+        WHERE conversation_id = #{conversationId} AND role = 'ASSISTANT'
+        ORDER BY create_time DESC LIMIT 1
+    </select>
+
+    <update id="updateTokens">
+        UPDATE t_ai_message
+        SET input_tokens = #{inputTokens}, output_tokens = #{outputTokens}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

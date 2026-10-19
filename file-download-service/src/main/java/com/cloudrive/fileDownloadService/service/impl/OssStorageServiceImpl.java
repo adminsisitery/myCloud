@@ -4,6 +4,7 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.GetObjectRequest;
 import com.aliyun.oss.model.OSSObject;
+import com.aliyun.oss.model.ObjectMetadata;
 import com.cloudrive.fileDownloadService.config.properties.OssProProperties;
 import com.cloudrive.fileDownloadService.service.StorageService;
 import com.cloudrive.pan_common.enums.ErrorCode;
@@ -19,8 +20,8 @@ import java.io.InputStream;
 /**
  * 阿里云 OSS 文件存储服务实现（下载服务最小集）
  * <p>
- * 从 file-upload-service 的 {@code OssStorageServiceImpl} 中裁剪出下载所需的部分：
- * Range 读取对象流、OSS 客户端创建/关闭、启用开关校验。
+ * 覆盖单文件下载、文件夹打包、异步打包结果下载三种场景：
+ * 完整对象流、Range 区间流、对象元数据与对象删除。
  * 返回的流在关闭时会自动 shutdown 对应的 OSS 客户端，避免连接泄漏。
  * </p>
  *
@@ -38,14 +39,20 @@ public class OssStorageServiceImpl implements StorageService {
         this.ossProProperties = ossProProperties;
     }
 
-    /**
-     * 按闭区间 [start, end] 读取 OSS 对象
-     *
-     * @param path  存储对象路径（t_file_info.path）
-     * @param start 起始字节（含）
-     * @param end   结束字节（含）
-     * @return 对象区间输入流
-     */
+    @Override
+    public InputStream getFile(String path) {
+        checkOssEnabled();
+        OSS ossClient = getOssClient();
+        try {
+            OSSObject object = ossClient.getObject(ossProProperties.getBucketName(), path);
+            return new OssManagedInputStream(object.getObjectContent(), ossClient);
+        } catch (RuntimeException e) {
+            logger.error("OSS对象读取失败: objectKey={}", path, e);
+            closeOssClient(ossClient);
+            throw e;
+        }
+    }
+
     @Override
     public InputStream getFileRange(String path, long start, long end) {
         checkOssEnabled();
@@ -59,9 +66,37 @@ public class OssStorageServiceImpl implements StorageService {
             OSSObject object = ossClient.getObject(request);
             return new OssManagedInputStream(object.getObjectContent(), ossClient);
         } catch (RuntimeException e) {
-            logger.error("OSS对象读取失败: objectKey={}", path, e);
+            logger.error("OSS对象区间读取失败: objectKey={}, start={}, end={}", path, start, end, e);
             closeOssClient(ossClient);
             throw e;
+        }
+    }
+
+    @Override
+    public ObjectMetadata getObjectMetadata(String path) {
+        checkOssEnabled();
+        OSS ossClient = getOssClient();
+        try {
+            return ossClient.getObjectMetadata(ossProProperties.getBucketName(), path);
+        } catch (RuntimeException e) {
+            logger.error("OSS对象元数据读取失败: objectKey={}", path, e);
+            throw e;
+        } finally {
+            closeOssClient(ossClient);
+        }
+    }
+
+    @Override
+    public void deleteFile(String path) {
+        checkOssEnabled();
+        OSS ossClient = getOssClient();
+        try {
+            ossClient.deleteObject(ossProProperties.getBucketName(), path);
+            logger.info("OSS对象已删除: objectKey={}", path);
+        } catch (RuntimeException e) {
+            logger.warn("OSS对象删除失败: objectKey={}", path, e);
+        } finally {
+            closeOssClient(ossClient);
         }
     }
 

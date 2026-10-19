@@ -1,7 +1,7 @@
 package com.cloudrive.fileAsyncService.redis;
 
 import com.cloudrive.fileAsyncService.common.MqConstants;
-import com.cloudrive.fileAsyncService.model.entity.FolderDownloadTask;
+import com.cloudrive.pan_common.domain.folder.FolderDownloadTask;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;

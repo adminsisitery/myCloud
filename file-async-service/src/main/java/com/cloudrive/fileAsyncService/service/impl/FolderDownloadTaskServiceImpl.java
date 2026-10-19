@@ -1,7 +1,7 @@
 package com.cloudrive.fileAsyncService.service.impl;
 
-import com.cloudrive.fileAsyncService.enums.FolderDownloadStatus;
-import com.cloudrive.fileAsyncService.model.entity.FolderDownloadTask;
+import com.cloudrive.pan_common.domain.folder.FolderDownloadStatus;
+import com.cloudrive.pan_common.domain.folder.FolderDownloadTask;
 import com.cloudrive.fileAsyncService.redis.FolderDownloadRedis;
 import com.cloudrive.fileAsyncService.service.FolderArchiveService;
 import com.cloudrive.fileAsyncService.service.FolderDownloadTaskService;

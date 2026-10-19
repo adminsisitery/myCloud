@@ -21,6 +21,7 @@
         <module>file-share-service</module>
         <module>file-async-service</module>
         <module>file-preview-service</module>
+        <module>ai-service</module>
     </modules>
 
     <parent>

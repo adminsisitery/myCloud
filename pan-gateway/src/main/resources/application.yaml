@@ -26,11 +26,13 @@ spring:
           uri: lb://file-upload-service
           predicates:
             - Path=/api/chunk/**,/api/direct-upload/**,/api/upload-progress/**,/api/files/progress,/api/files/check,/api/files/fast-upload
-        # 单文件流式下载（GET /api/files/{fileId}/content，支持 Range 断点续传）独立拆到 file-download-service
+        # 下载域：单文件流式下载（GET /api/files/{fileId}/content）、
+        # 文件夹同步 ZIP（GET /api/file/{fileId}/content）与异步打包任务接口（/api/folder-download-tasks/**）
+        # 统一由 file-download-service 承接；打包执行在 file-async-service，不影响 HTTP 路由
         - id: file-download-service
           uri: lb://file-download-service
           predicates:
-            - Path=/api/files/*/content
+            - Path=/api/files/*/content,/api/file/*/content,/api/folder-download-tasks,/api/folder-download-tasks/**
         # 文件预览（OSS 预签名 URL，GET /api/files/preview/{fileId}）独立拆到 file-preview-service
         - id: file-preview-service
           uri: lb://file-preview-service
@@ -52,7 +54,12 @@ spring:
           uri: lb://file-async-service
           predicates:
             - Path=/ws/message
-        # 其余请求仍由单体承接（AI 域/文件夹打包下载及任务接口等），待后续拆分收敛
+        # 其余请求仍由单体承接（AI 域等），待后续拆分收敛
+        # AI 对话 / Agent（SSE 流式）与管理端用量统计
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**,/admin/ai/cost/**
         - id: mycloud-backend
           uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
           predicates:

@@ -40,6 +40,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- RabbitMQ：文件夹打包任务投递（实际消费在 file-async-service） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
         <!-- 持久层：下载前读取 t_file_info 做归属/类型校验（Boot 3 必须用 boot3 starter） -->
         <dependency>
             <groupId>com.baomidou</groupId>
