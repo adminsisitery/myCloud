@@ -95,13 +95,4 @@ public interface FileInfoMapperService extends IService<FileInfo> {
      * @return 匹配到的文件列表
      */
     List<FileInfo> findInIdAndUserId(List<Long> ids, Long currentUserId);
-
-    /**
-     * 按文件名关键词模糊搜索当前用户的未删除文件（MySQL LIKE 策略）
-     *
-     * @param keyword       关键词
-     * @param currentUserId 当前用户 ID
-     * @return 匹配的文件列表
-     */
-    List<FileInfo> findBykeyWord(String keyword, Long currentUserId);
 }

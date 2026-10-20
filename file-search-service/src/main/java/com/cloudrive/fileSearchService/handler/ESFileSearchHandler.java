@@ -1,23 +1,22 @@
-package com.cloudrive.fileManageService.handler;
+package com.cloudrive.fileSearchService.handler;
 
-import com.cloudrive.fileManageService.mapper.FileMapper;
-import com.cloudrive.fileManageService.model.vo.FileListVO;
-import com.cloudrive.fileManageService.service.FileSearchService;
+import com.cloudrive.fileSearchService.mapper.FileMapper;
+import com.cloudrive.fileSearchService.model.vo.FileListVO;
+import com.cloudrive.fileSearchService.service.FileSearchService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
- * 文件搜索处理器：Elasticsearch 实现
+ * Elasticsearch 搜索策略
  * <p>
- * 仅当 {@code file.search=ES} 时启用，查询 ES 索引 {@code file_index}
- * 并回查 MySQL 校验权限、组装完整文件信息。
+ * {@code file.search=ES} 时生效：查询 file_index 索引（文件名/内容），
+ * 再回查 t_file_info 完成归属与未删除校验。
  * </p>
  *
  * @author 飞飞
- * @date 2026/10/19
+ * @date 2026/10/20
  */
 @Service
 @ConditionalOnProperty(prefix = "file", name = "search", havingValue = "ES")
@@ -26,7 +25,8 @@ public class ESFileSearchHandler implements FileSearchHandler {
     private final FileSearchService fileSearchService;
     private final FileMapper fileMapper;
 
-    public ESFileSearchHandler(FileSearchService fileSearchService, FileMapper fileMapper) {
+    public ESFileSearchHandler(FileSearchService fileSearchService,
+                               FileMapper fileMapper) {
         this.fileSearchService = fileSearchService;
         this.fileMapper = fileMapper;
     }
@@ -36,6 +36,6 @@ public class ESFileSearchHandler implements FileSearchHandler {
         return fileSearchService.searchFile(keyword)
                 .stream()
                 .map(fileMapper::toFileListVO)
-                .collect(Collectors.toList());
+                .toList();
     }
 }

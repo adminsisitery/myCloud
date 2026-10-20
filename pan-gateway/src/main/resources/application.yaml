@@ -38,6 +38,12 @@ spring:
           uri: lb://file-preview-service
           predicates:
             - Path=/api/files/preview,/api/files/preview/**
+        # 文件搜索（GET /api/files/search）拆到独立 file-search-service；
+        # 精确路径须排在 file-manage-service 路由之前，避免被 /api/files/** 吃掉
+        - id: file-search-service
+          uri: lb://file-search-service
+          predicates:
+            - Path=/api/files/search
         # 文件/文件夹管理（列表/新建文件夹/重命名/移动/复制/收藏/最近访问/回收站）拆到 file-manage-service；
         # 上传、下载、预览的精确路由排在本路由之前，优先匹配
         - id: file-manage-service

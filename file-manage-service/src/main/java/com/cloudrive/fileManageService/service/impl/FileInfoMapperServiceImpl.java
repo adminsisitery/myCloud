@@ -184,22 +184,6 @@ public class FileInfoMapperServiceImpl extends ServiceImpl<FileInfoMapper, FileI
     }
 
     /**
-     * 按文件名关键词模糊搜索当前用户的未删除文件（MySQL LIKE 策略）
-     *
-     * @param keyword       关键词
-     * @param currentUserId 当前用户 ID
-     * @return 匹配的文件列表
-     */
-    @Override
-    public List<FileInfo> findBykeyWord(String keyword, Long currentUserId) {
-        return lambdaQuery()
-                .like(FileInfo::getFilename, keyword)
-                .eq(FileInfo::getIsDeleted, false)
-                .eq(FileInfo::getUserId, currentUserId)
-                .list();
-    }
-
-    /**
      * 目录路径规范化：统一以 "/" 结尾，避免前缀误匹配
      *
      * @param path 原始路径
