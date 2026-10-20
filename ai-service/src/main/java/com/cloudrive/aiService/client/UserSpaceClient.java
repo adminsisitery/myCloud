@@ -5,12 +5,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
- * 空间配额跨服务客户端。
+ * 用户空间配额远程调用客户端。
  * <p>
  * 调用 user-service 的内网接口 {@code /internal/space/**}，避免 ai-service 直接写
  * {@code t_user_center} 导致空间数据多写者。
- * 注意：{@link FeignClient} 本身就会把该接口注册为 Spring Bean，不需要（也不能）再加
- * {@code @Component}，否则会重复注册；接口方法也不能带方法体。
  * </p>
  *
  * @author 飞飞
