@@ -18,6 +18,7 @@
         <module>file-download-service</module>
         <module>file-manage-service</module>
         <module>file-search-service</module>
+        <module>file-task-service</module>
         <module>file-share-service</module>
         <module>file-async-service</module>
         <module>file-preview-service</module>

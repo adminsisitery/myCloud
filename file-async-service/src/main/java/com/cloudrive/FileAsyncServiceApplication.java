@@ -4,7 +4,6 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.retry.annotation.EnableRetry;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 异步处理微服务启动类
@@ -17,7 +16,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileAsyncService.repositorys")
 @EnableRetry
-@EnableScheduling
 public class FileAsyncServiceApplication {
 
     public static void main(String[] args) {

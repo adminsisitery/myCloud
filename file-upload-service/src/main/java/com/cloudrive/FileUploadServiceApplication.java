@@ -3,7 +3,6 @@ package com.cloudrive;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 文件上传服务启动类。
@@ -17,7 +16,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileService.repositorys")
-@EnableScheduling
 public class FileUploadServiceApplication {
 
     public static void main(String[] args) {
