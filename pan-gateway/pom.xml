@@ -54,6 +54,12 @@
             <artifactId>sa-token-redis-template</artifactId>
             <version>${sa-token.version}</version>
         </dependency>
+        <!-- nacos 配置注册 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
