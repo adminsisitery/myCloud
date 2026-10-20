@@ -1,75 +1,28 @@
+# 本地只保留启动引导配置，其余业务配置全部托管到 Nacos（DEFAULT_GROUP）
+# 共享配置：pan-common / pan-mysql / pan-redis / pan-mybitis / pan-sa-token / pan-mail
+# 服务独有配置：user-service（GitHub 登录）
 server:
   port: ${USER_SERVICE_PORT:8081}
-  shutdown: graceful
 
 spring:
   application:
     name: user-service
-  lifecycle:
-    timeout-per-shutdown-phase: 20s
-
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:mycloud}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
-    username: ${MYSQL_USERNAME:root}
-    password: ${MYSQL_PASSWORD:root}
-    hikari:
-      maximum-pool-size: 10
-      connection-timeout: 10000
-
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      database: 0
-
+  config:
+    import:
+      - "optional:nacos:pan-common?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-mysql?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-redis?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-mybitis?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-sa-token?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-mail?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:user-service?group=DEFAULT_GROUP&refreshEnabled=true"
   cloud:
     nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
-
-  # EmailUtil 在构造器里读取该值，缺失会导致启动失败
-  mail:
-    host: ${SPRING_MAIL_HOST:smtp.qq.com}
-    port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:no-reply@example.com}
-    password: ${SPRING_MAIL_PASSWORD:}
-    properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
-      mail.smtp.starttls.required: true
-
-# GitHub 第三方登录
-oauth:
-  # 前端站点地址，授权结束后跳回该站点
-  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
-  github:
-    client-id: ${OAUTH_GITHUB_CLIENT_ID:}
-    client-secret: ${OAUTH_GITHUB_CLIENT_SECRET:}
-    # 回调地址必须指向网关，由网关按路由转发到本服务
-    redirect-uri: ${OAUTH_GITHUB_REDIRECT_URI:http://localhost:8090/api/auth/github/callback}
-
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-
-# 与网关保持完全一致，两边共享同一份 Redis 会话
-sa-token:
-  token-name: Authorization
-  token-prefix: ""
-  timeout: 2592000
-  active-timeout: -1
-  is-concurrent: false
-  is-share: false
-  is-read-header: true
-  is-read-body: false
-  is-read-cookie: false
-  is-log: false
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info

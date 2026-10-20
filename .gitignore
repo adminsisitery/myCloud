@@ -57,3 +57,14 @@ build/
 .env.*
 !.env.example
 /agent-evaluation*.json
+
+# ===== 微服务启动引导配置（不含任何密钥，业务配置托管 Nacos，允许随代码入库）=====
+!ai-service/src/main/resources/application.yml
+!file-async-service/src/main/resources/application.yml
+!file-download-service/src/main/resources/application.yml
+!file-manage-service/src/main/resources/application.yml
+!file-preview-service/src/main/resources/application.yml
+!file-search-service/src/main/resources/application.yml
+!file-share-service/src/main/resources/application.yml
+!file-task-service/src/main/resources/application.yml
+!pan-gateway/src/main/resources/application.yaml

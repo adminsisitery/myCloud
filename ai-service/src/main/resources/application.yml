@@ -1,0 +1,33 @@
+# 本地只保留启动引导配置，其余业务配置全部托管到 Nacos（DEFAULT_GROUP）
+# 共享配置：pan-common / pan-mysql / pan-redis / pan-mybitis / pan-sa-token / pan-oss /
+#           pan-ai / pan-agent / pan-langfuse / pan-elasticsearch
+# 服务独有配置：ai-service（Prometheus 指标端点）
+server:
+  port: ${FILE_AI_SERVICE_PORT:8088}
+
+spring:
+  application:
+    name: ai-service
+  config:
+    import:
+      - "optional:nacos:pan-common?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-mysql?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-redis?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-mybitis?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-sa-token?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-oss?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-ai?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-agent?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-langfuse?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-elasticsearch?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:ai-service?group=DEFAULT_GROUP&refreshEnabled=true"
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}

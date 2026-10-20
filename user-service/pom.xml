@@ -105,6 +105,13 @@
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
 
+        <!-- nacos 配置注册 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
         <!-- 实体 → DTO / VO 的编译期转换 -->
         <dependency>
             <groupId>org.mapstruct</groupId>

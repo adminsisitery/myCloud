@@ -1,93 +1,27 @@
+# 本地只保留启动引导配置；网关路由、排除路径、Redis、sa-token 全部托管到 Nacos
+# 共享配置：pan-common / pan-redis / pan-sa-token / pan-exclude-paths / pan-gateways
 server:
   port: ${GATEWAY_PORT:8090}
+
 spring:
   application:
     name: gateway
   main:
     web-application-type: reactive
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+  config:
+    import:
+      - "optional:nacos:pan-common?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-redis?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-sa-token?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-exclude-paths?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-gateways?group=DEFAULT_GROUP&refreshEnabled=true"
   cloud:
     nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        group: DEFAULT_GROUP
+        file-extension: yaml
+        refresh-enabled: true
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
-    gateway:
-      routes:
-        # 用户身份与第三方登录同属用户域，统一走 user-service 的服务发现负载均衡
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/user/**,/api/auth/github/**
-        # 上传链路（普通上传/秒传判定/秒传执行/分片/直传/进度）拆到 file-upload-service
-        - id: file-upload-service
-          uri: lb://file-upload-service
-          predicates:
-            - Path=/api/chunk/**,/api/direct-upload/**,/api/upload-progress/**,/api/files/progress,/api/files/check,/api/files/fast-upload
-        # 下载域：单文件流式下载（GET /api/files/{fileId}/content）、
-        # 文件夹同步 ZIP（GET /api/file/{fileId}/content）与异步打包任务接口（/api/folder-download-tasks/**）
-        # 统一由 file-download-service 承接；打包执行在 file-async-service，不影响 HTTP 路由
-        - id: file-download-service
-          uri: lb://file-download-service
-          predicates:
-            - Path=/api/files/*/content,/api/file/*/content,/api/folder-download-tasks,/api/folder-download-tasks/**
-        # 文件预览（OSS 预签名 URL，GET /api/files/preview/{fileId}）独立拆到 file-preview-service
-        - id: file-preview-service
-          uri: lb://file-preview-service
-          predicates:
-            - Path=/api/files/preview,/api/files/preview/**
-        # 文件搜索（GET /api/files/search）拆到独立 file-search-service；
-        # 精确路径须排在 file-manage-service 路由之前，避免被 /api/files/** 吃掉
-        - id: file-search-service
-          uri: lb://file-search-service
-          predicates:
-            - Path=/api/files/search
-        # 文件/文件夹管理（列表/新建文件夹/重命名/移动/复制/收藏/最近访问/回收站）拆到 file-manage-service；
-        # 上传、下载、预览的精确路由排在本路由之前，优先匹配
-        - id: file-manage-service
-          uri: lb://file-manage-service
-          predicates:
-            - Path=/api/files,/api/files/**,/api/file/folder
-        # 文件分享（创建/列表/取消/密码与Token校验/分享内容下载）拆到独立 file-share-service
-        - id: file-share
-          uri: lb://file-share-service
-          predicates:
-            - Path=/api/shares,/api/shares/**
-        # 实时用量通知 WebSocket（端点 /ws/message 由 file-async-service 提供，握手时由端点自行校验 token）
-        - id: file-async-service-ws
-          uri: lb://file-async-service
-          predicates:
-            - Path=/ws/message
-        # AI 对话 / Agent（SSE 流式）与管理端用量统计
-        - id: ai-service
-          uri: lb://ai-service
-          predicates:
-            - Path=/api/ai/**,/admin/ai/cost/**
-        # 说明：单体（mycloud-backend）已退场，未匹配上述路由的请求由网关直接返回 404。
-sa-token:
-  token-name: Authorization
-  token-prefix: ""
-  timeout: 2592000
-  active-timeout: -1
-  is-concurrent: false
-  is-share: false
-  is-read-header: true
-  is-read-body: false
-  is-read-cookie: false
-  is-log: false
-pan:
-  user:
-    exclude-paths:
-      - /api/user/login
-      - /api/user/register
-      - /api/user/verification-code
-      - /api/shares/**
-      - /api/auth/github/**
-      - /ws/message
-      - /swagger-ui/**
-      - /v3/api-docs
-      - /v3/api-docs/**
-      - /swagger-resources/**
-      - /error
