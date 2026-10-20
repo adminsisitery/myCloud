@@ -60,16 +60,12 @@ spring:
           uri: lb://file-async-service
           predicates:
             - Path=/ws/message
-        # 其余请求仍由单体承接（AI 域等），待后续拆分收敛
         # AI 对话 / Agent（SSE 流式）与管理端用量统计
         - id: ai-service
           uri: lb://ai-service
           predicates:
             - Path=/api/ai/**,/admin/ai/cost/**
-        - id: mycloud-backend
-          uri: ${MYCLOUD_BACKEND_URI:http://localhost:8080}
-          predicates:
-            - Path=/**
+        # 说明：单体（mycloud-backend）已退场，未匹配上述路由的请求由网关直接返回 404。
 sa-token:
   token-name: Authorization
   token-prefix: ""

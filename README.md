@@ -1,27 +1,44 @@
 # MyCloud
 
-MyCloud 是一个基于 Java 21 与 Spring Boot 3.2.3 的个人云盘后端。项目同时包含文件管理、OSS 对象存储、分片与 STS 直传、异步文件夹打包、分享、搜索、WebSocket 通知，以及基于 LangChain4j 的 RAG/Agent 能力。
+MyCloud 是一个基于 Java 21 + Spring Boot 3.2.3 的微服务化个人云盘后端。原单体（`src/`，8080）已退场，业务能力全部拆分到下列模块，根 `pom.xml` 只做聚合。
 
-项目的统一说明入口：
+## 模块
 
-- [项目说明书](docs/project-handbook.md)：架构、模块、数据模型、核心流程、接口分组、运行依赖、风险与文档更新规则。
-- [API 接口文档](docs/cloud-drive-api.md)：较详细的请求与响应示例；使用前应与 Controller 当前实现核对。
-- [上传与断点下载指南](docs/upload-backend-guide.md)：STS 直传、后端分片、Range 下载和文件夹异步下载。
-- [路线图](docs/roadmap.md) 与 [剩余功能](docs/remaining-features.md)：规划材料，不代表功能已经实现。
+| 模块 | 端口 | 职责 |
+|---|---|---|
+| `pan-common` | — | 公共库：Result / ErrorCode / 工具类、MQ 消息体、文件夹任务 DTO |
+| `pan-gateway` | 8090 | Spring Cloud Gateway 网关（HTTP + WebSocket 路由、Sa-Token 登录校验） |
+| `user-service` | 8081 | 用户/登录/注册/GitHub OAuth/空间配额（`/internal/space/**`） |
+| `file-upload-service` | 8082 | 分片上传/STS 直传/普通上传/秒传/进度/OSS 存储 |
+| `file-download-service` | 8083 | 单文件流式下载、文件夹同步 ZIP、异步打包任务 HTTP 接口 |
+| `file-manage-service` | 8084 | 文件/文件夹管理：列表、新建文件夹、重命名、移动、复制、收藏、最近访问、回收站 |
+| `file-share-service` | 8085 | 分享创建/列表/取消、密码与 Token 校验、分享内容下载 |
+| `file-async-service` | 8086 | MQ 消费端：ES/PG 索引同步、操作日志落库、用量通知（WebSocket `/ws/message` + 邮件）、文件夹打包执行 |
+| `file-preview-service` | 8087 | 文件在线预览（OSS 预签名 URL） |
+| `ai-service` | 8088 | AI 对话 / Agent / RAG / 记忆 / 用量统计 |
+| `file-search-service` | 8089 | 文件搜索（`file.search=Mysql` 默认数据库 LIKE，可切 ES） |
+| `file-task-service` | 8091 | 集中定时任务：上传/分片/直传超时清理、分享过期、文件夹打包清理、回收站 30 天清理 |
 
-## 当前验证基线
+## 构建
 
-- 文档快照：2026-08-08，基于当前工作区（包括尚未提交的改动）。
-- CodeGraph：228 个文件、5,265 个节点、10,512 条关系，已使用当前引擎重新索引。
-- 测试：`mvn test`，101 个测试全部通过。
-- Maven Wrapper 当前缺少 `.mvn/wrapper/maven-wrapper.properties`，请暂时使用本机 Maven。
+```bash
+export JAVA_HOME=/path/to/jdk21
+mvn -DskipTests clean package
+```
 
-## 快速开始
+单个模块构建：`mvn -DskipTests -pl <module> -am package`。产物为各模块 `target/*-service-1.0-SNAPSHOT.jar`。
 
-1. 准备 MySQL、Redis、RabbitMQ、Elasticsearch、PostgreSQL + pgvector 和阿里云 OSS。
-2. 将 `application.yml` 中的敏感配置迁移为环境变量或外部配置，禁止继续提交真实密钥。
-3. 执行 `docs/db/` 中尚未应用的迁移脚本。
-4. 使用 Java 21 执行 `mvn test`，再执行 `mvn spring-boot:run`。
-5. 默认服务端口及 Swagger 地址以 `application.yml` 为准。
+## 运行依赖
 
-> 安全提示：当前代码和配置中存在硬编码凭据，部署或共享仓库前必须轮换并清理。详细项见项目说明书的“已知风险与技术债”。
+MySQL、Redis、RabbitMQ、Elasticsearch、PostgreSQL + pgvector、Nacos、阿里云 OSS；AI 域另需 DeepSeek / OpenAI 兼容 Key。各服务通过环境变量注入连接信息（详见各模块 `src/main/resources/application.yml`，如 `MYSQL_HOST`/`REDIS_HOST`/`RABBITMQ_HOST`/`NACOS_SERVER_ADDR`/`OSS_*`/`AI_*`）。
+
+## 网关路由
+
+`pan-gateway` 按精确路径把请求转发到对应服务（上传/下载/预览/搜索的精确路由优先于 `/api/files/**` 管理路由），未匹配的请求直接返回 404。`/ws/message` 走 `file-async-service`，AI 的 SSE 流式接口走 `ai-service`。
+
+## 说明
+
+- 运行期服务间调用目前使用 RestClient + 环境变量地址（Nacos 只用于网关侧服务发现），RPC 规范化（`lb://` + 超时/重试/熔断/trace）与 `/internal/**` 服务间鉴权在后续迭代补齐。
+- 部署编排（各服务 Dockerfile / compose / 基础设施编排 / 健康检查）尚未落地，当前仓库不再包含旧的单体 `Dockerfile` 与 `compose.yml`。
+- AI Agent 功能说明见 [AGENT_FEATURES.md](AGENT_FEATURES.md)。
+- Maven Wrapper 缺少 `.mvn/wrapper/maven-wrapper.properties`，请使用本机 Maven 3.9+。
