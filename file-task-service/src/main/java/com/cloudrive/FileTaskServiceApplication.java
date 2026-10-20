@@ -3,6 +3,7 @@ package com.cloudrive;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -23,6 +24,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileTaskService.repositorys")
 @EnableScheduling
+@EnableFeignClients(basePackages = "com.cloudrive.fileTaskService.client")
 public class FileTaskServiceApplication {
 
     public static void main(String[] args) {

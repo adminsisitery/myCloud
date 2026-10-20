@@ -31,9 +31,34 @@
         <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
         <aliyun-oss.version>3.16.1</aliyun-oss.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
+    <spring-cloud.version>2023.0.3</spring-cloud.version>
     </properties>
 
+    <!-- Spring Cloud 版本管理（Spring Boot 3.2.3 对应 2023.0.x 系列） -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
+        <!-- OpenFeign 远程调用（版本由 spring-cloud-dependencies BOM 管理） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- LoadBalancer 客户端负载均衡（配合 Nacos 服务发现使用 lb://） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

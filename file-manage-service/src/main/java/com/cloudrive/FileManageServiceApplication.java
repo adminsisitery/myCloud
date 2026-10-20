@@ -3,6 +3,7 @@ package com.cloudrive;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
  * 文件管理微服务启动类
@@ -15,8 +16,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileManageService.repositorys")
+@EnableFeignClients(basePackages = "com.cloudrive.fileManageService.client")
 public class FileManageServiceApplication {
-
     public static void main(String[] args) {
         SpringApplication.run(FileManageServiceApplication.class, args);
     }

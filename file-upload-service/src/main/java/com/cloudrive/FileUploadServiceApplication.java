@@ -3,6 +3,7 @@ package com.cloudrive;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
  * 文件上传服务启动类。
@@ -16,8 +17,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileService.repositorys")
+@EnableFeignClients(basePackages = "com.cloudrive.fileService.client")
 public class FileUploadServiceApplication {
-
     public static void main(String[] args) {
         SpringApplication.run(FileUploadServiceApplication.class, args);
     }

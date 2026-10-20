@@ -3,6 +3,7 @@ package com.cloudrive;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
 /**
  * 文件下载服务启动类。
@@ -16,6 +17,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan("com.cloudrive.fileDownloadService.repositorys")
+@EnableFeignClients(basePackages = "com.cloudrive.fileDownloadService.client")
 public class FileDownloadServiceApplication {
 
     public static void main(String[] args) {
