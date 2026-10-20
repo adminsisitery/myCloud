@@ -29,3 +29,7 @@ spring:
         refresh-enabled: true
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+# 只有本服务声明 RabbitMQ 队列拓扑（消费端统一创建），其他服务只发消息
+pan:
+  rabbit:
+    topology-enabled: true

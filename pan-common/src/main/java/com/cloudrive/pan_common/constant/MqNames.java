@@ -70,4 +70,13 @@ public final class MqNames {
         private Dlq() {
         }
     }
+    /** 文件夹打包任务（Topic 交换机，任务状态存 Redis、压缩包存 OSS） */
+    public static final class FolderDownload {
+        public static final String EXCHANGE = "folder.download.topic";
+        public static final String QUEUE = "folder.download.queue";
+        public static final String KEY = "folder.download.create";
+
+        private FolderDownload() {
+        }
+    }
 }

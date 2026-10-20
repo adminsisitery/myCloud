@@ -83,6 +83,10 @@
             <optional>true</optional>
         </dependency>
 
-
+        <!-- RabbitMQ：统一声明队列拓扑（仅 file-async-service 打开开关时生效） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
     </dependencies>
 </project>
