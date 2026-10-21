@@ -21,7 +21,7 @@ import java.util.Map;
  * 交换机/队列/绑定；其他服务（含生产者）不声明，只发消息。
  * </p>
  */
-@Configuration(proxyBeanMethods = false)
+@Configuration
 @ConditionalOnProperty(prefix = "pan.rabbit", name = "topology-enabled", havingValue = "true")
 public class RabbitMqTopologyConfig {
 
