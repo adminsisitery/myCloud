@@ -60,7 +60,21 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
-    </dependencies>
+            <!-- Sentinel 熔断限流（版本线与 Nacos 同为 spring-cloud-alibaba.version） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
+        <!-- 网关用 Sentinel 的 Gateway 适配器，规则维度按 routeId / API 分组 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-sentinel-gateway</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
+</dependencies>
 
     <build>
         <plugins>

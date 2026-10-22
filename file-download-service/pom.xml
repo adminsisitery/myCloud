@@ -141,7 +141,14 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
-    </dependencies>
+            <!-- Sentinel 熔断限流（版本线与 Nacos 同为 spring-cloud-alibaba.version） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
+</dependencies>
 
     <build>
         <plugins>
