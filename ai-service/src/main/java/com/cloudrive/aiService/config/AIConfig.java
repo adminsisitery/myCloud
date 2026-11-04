@@ -33,7 +33,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(LangfuseProperties.class)
+@EnableConfigurationProperties({LangfuseProperties.class, AIProperties.class})
 public class AIConfig {
 
     private final AIProperties properties;
