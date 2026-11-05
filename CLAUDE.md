@@ -66,3 +66,7 @@ MySQL、Redis、RabbitMQ、Elasticsearch、PostgreSQL + pgvector、Nacos、阿�
 - **xmlAnd**：职责/技术栈：待补充。
 
 **简历 / 项目描述规则**：不确定时先问，不要假设。
+
+**问题约定**：有什么你没办法做到的，及时和我说，不要绕过去
+
+

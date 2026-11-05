@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * 邮件发送器或发件人邮箱未配置时只记录日志并返回 false，不影响 MQ 消费主流程。</p>
  */
 @Slf4j
-@Component
+@Component("asyncEmailUtil")
 public class EmailUtil {
 
     private static JavaMailSender mailSender;

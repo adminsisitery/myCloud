@@ -112,6 +112,14 @@
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
 
+        <!-- Nacos 服务端为 3.x，要求客户端 ≥ 2.5.0（2.5.0 起移除 gRPC v1 协议）；
+             显式固定 nacos-client 到 2.5.1 以兼容 3.x 服务端 -->
+        <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-client</artifactId>
+            <version>2.5.1</version>
+        </dependency>
+
         <!-- 实体 → DTO / VO 的编译期转换 -->
         <dependency>
             <groupId>org.mapstruct</groupId>
@@ -138,6 +146,13 @@
             <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
+
+        <!-- 单元测试：JUnit 5 + Mockito + AssertJ，由 spring-boot-starter-test 一并带入 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -163,6 +178,44 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <!-- 测试阶段织入探针；Mockito 5 的 inline mock maker 与之兼容 -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <!-- 绑到 test 阶段：mvn test 结束即可在 target/site/jacoco 下看报告 -->
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 排除没有分支逻辑的代码，否则覆盖率会被数据类和生成代码稀释：
+                                 model 下是 PO/VO/DTO 数据载体，config/properties 是纯配置绑定，
+                                 *Application 是启动类，*MapperImpl 是 MapStruct 生成的，
+                                 mapper/repositorys 是 MyBatis 接口（只有 SQL 注解，没有可执行分支） -->
+                            <excludes>
+                                <exclude>**/model/**</exclude>
+                                <exclude>**/domain/**</exclude>
+                                <exclude>**/config/properties/**</exclude>
+                                <exclude>**/*Application.class</exclude>
+                                <exclude>**/*MapperImpl.class</exclude>
+                                <exclude>**/*ConverterImpl.class</exclude>
+                                <exclude>**/mapper/**</exclude>
+                                <exclude>**/repositorys/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

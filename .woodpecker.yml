@@ -1,0 +1,27 @@
+# Woodpecker CI/CD — 服务器上直接编译+部署，不走 SSH
+
+pipeline:
+  compile:
+    image: maven:3.9-eclipse-temurin-21
+    commands:
+      - mvn -DskipTests compile -q
+
+  package:
+    image: maven:3.9-eclipse-temurin-21
+    commands:
+      - mvn -DskipTests package -q
+      - echo "=== 产物 ==="
+      - find . -name "*-1.0-SNAPSHOT.jar" -exec ls -lh {} \;
+
+  deploy:
+    image: docker:cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/mycloud:/opt/mycloud
+    commands:
+      - apk add --no-cache docker-compose curl
+      - cp ./*/target/*-1.0-SNAPSHOT.jar /opt/mycloud/
+      - cd /opt/mycloud && docker-compose build && docker-compose up -d
+      - sleep 30
+      - docker-compose ps
+      - curl -sf -XPOST localhost:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || true

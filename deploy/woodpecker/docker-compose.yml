@@ -1,0 +1,36 @@
+# Woodpecker CI/CD — GitHub + 自托管
+# 访问: http://47.95.192.221:9090
+# Agent 挂载 docker.sock + /opt/mycloud，直接操作容器部署
+
+services:
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:latest
+    container_name: woodpecker-server
+    ports:
+      - "9090:8000"
+    volumes:
+      - woodpecker-data:/var/lib/woodpecker
+    environment:
+      - WOODPECKER_HOST=http://47.95.192.221:9090
+      - WOODPECKER_GITHUB=true
+      - WOODPECKER_GITHUB_CLIENT=replace-me-github-client-id
+      - WOODPECKER_GITHUB_SECRET=replace-me-github-client-secret
+      - WOODPECKER_AGENT_SECRET=woodpecker-agent-change-me
+    restart: always
+    mem_limit: 200m
+
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:latest
+    container_name: woodpecker-agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/mycloud:/opt/mycloud
+    environment:
+      - WOODPECKER_SERVER=woodpecker-server:9000
+      - WOODPECKER_AGENT_SECRET=woodpecker-agent-change-me
+      - WOODPECKER_MAX_WORKFLOWS=1
+    restart: always
+    mem_limit: 300m
+
+volumes:
+  woodpecker-data:
