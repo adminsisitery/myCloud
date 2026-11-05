@@ -3,6 +3,8 @@ name: myCloud CI/CD
 on:
   push:
     branches: [Microservices, master]
+  pull_request:
+    branches: [Microservices, master]
 
 jobs:
   build-and-deploy:
@@ -26,9 +28,19 @@ jobs:
         run: mvn -Dmaven.test.skip=true package -q
 
       - name: Deploy
+        if: github.event_name == 'push'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key */target/*-1.0-SNAPSHOT.jar ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/mycloud/
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /opt/mycloud && docker compose down && docker compose build && docker compose up -d && docker system prune -f && sleep 30 && docker compose ps"
+
+      - name: Health Check
+        if: github.event_name == 'push'
+        run: |
+          sleep 30
+          echo "=== Gateway ==="
+          curl -sf -XPOST http://${{ secrets.SERVER_HOST }}:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || echo "WARN: login failed"
+          echo "=== Nacos services ==="
+          curl -sf http://${{ secrets.SERVER_HOST }}:8848/nacos/ || echo "WARN: nacos check failed"
