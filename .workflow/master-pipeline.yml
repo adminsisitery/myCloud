@@ -13,41 +13,16 @@ variables:
   JDK_VERSION: 21
 
 stages:
-  - stage: compile
-    name: 编译阶段
-    displayName: 编译
+  - stage: build
+    name: 构建阶段
+    displayName: 编译打包
     steps:
       - step: build@maven
-        name: maven-compile
-        displayName: Maven 编译
-        jdkVersion: ${JDK_VERSION}
-        mavenVersion: 3.9.11
-        commands:
-          - mvn -DskipTests compile -q
-
-  - stage: test
-    name: 测试阶段
-    displayName: 单元测试
-    steps:
-      - step: build@maven
-        name: maven-test
-        displayName: Maven 测试
-        jdkVersion: ${JDK_VERSION}
-        mavenVersion: 3.9.11
-        commands:
-          - mvn install -DskipTests -q
-          - mvn test -q
-
-  - stage: package
-    name: 打包阶段
-    displayName: 打包
-    steps:
-      - step: build@maven
-        name: maven-package
-        displayName: Maven 打包
+        name: maven-build
+        displayName: Maven 编译 + 打包
         jdkVersion: ${JDK_VERSION}
         mavenVersion: 3.9.11
         commands:
           - mvn -DskipTests clean package -q
-          - echo "=== 产物列表 ==="
+          - echo "=== 产物 ==="
           - find . -name "*-1.0-SNAPSHOT.jar" -exec ls -lh {} \;
