@@ -1,0 +1,22 @@
+[Unit]
+Description=myCloud File Upload Service (8082) — 分片上传/STS直传/普通上传/秒传
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/opt/mycloud/.env
+WorkingDirectory=/opt/mycloud
+ExecStart=/usr/bin/java \
+  -Xms128m -Xmx192m \
+  -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+  -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/mycloud/logs \
+  -jar /opt/mycloud/file-upload-service-1.0-SNAPSHOT.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/mycloud/logs/file-upload-service.log
+StandardError=append:/opt/mycloud/logs/file-upload-service.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+version: '1.0'
+name: mycloud-ci
+
+triggers:
+  push:
+    branches:
+      include:
+        - Microservices
+        - master
+
+variables:
+  BUILD_IMAGE: mycloud-ci
+
+stages:
+  - stage: build
+    name: 构建验证（JDK21 + Maven）
+    steps:
+      - step: image@build
+        name: docker-build
+        displayName: Docker 编译 + 测试
+        dockerfile: ./Dockerfile.ci
+        context: ./
+        imageTag: ${BUILD_IMAGE}:${GITEE_PIPELINE_BUILD_NUMBER}

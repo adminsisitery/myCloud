@@ -1,0 +1,22 @@
+# Jenkins CI/CD —— 独立 compose，不跟业务服务混在一起
+# 启动: docker-compose -f deploy/jenkins/docker-compose.yml up -d
+# 访问: http://47.95.192.221:9090
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: mycloud-jenkins
+    ports:
+      - "9090:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/mycloud:/opt/mycloud
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx768m
+    restart: always
+    mem_limit: 1g
+
+volumes:
+  jenkins_home:

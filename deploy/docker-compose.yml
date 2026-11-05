@@ -1,0 +1,140 @@
+# ============================================================
+# myCloud Docker Compose —— 在服务器 /opt/mycloud/ 下执行:
+#   docker compose build && docker compose up -d
+# ============================================================
+# 所有服务使用 host 网络，直接走 localhost 连中间件，
+# .env 文件不需要任何修改。
+# ============================================================
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: pan-gateway-1.0-SNAPSHOT.jar
+    container_name: mycloud-gateway
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: user-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-user-service
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-upload:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-upload-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-upload
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-download:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-download-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-download
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-manage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-manage-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-manage
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-share:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-share-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-share
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-async:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-async-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-async
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-preview:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-preview-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-preview
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: ai-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-ai-service
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 512m
+
+  file-search:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-search-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-search
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m
+
+  file-task:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JAR_FILE: file-task-service-1.0-SNAPSHOT.jar
+    container_name: mycloud-file-task
+    network_mode: host
+    env_file: .env
+    restart: always
+    mem_limit: 400m

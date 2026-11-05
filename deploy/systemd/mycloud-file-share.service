@@ -1,0 +1,22 @@
+[Unit]
+Description=myCloud File Share Service (8085) — 分享创建/列表/取消/密码Token校验/下载
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/opt/mycloud/.env
+WorkingDirectory=/opt/mycloud
+ExecStart=/usr/bin/java \
+  -Xms128m -Xmx192m \
+  -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+  -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/mycloud/logs \
+  -jar /opt/mycloud/file-share-service-1.0-SNAPSHOT.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/mycloud/logs/file-share-service.log
+StandardError=append:/opt/mycloud/logs/file-share-service.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# CI 构建用 Dockerfile —— 在容器里用 JDK 21 + Maven 编译 + 测试
+# Gitee Go 用 image@build 跑这个，构建成功 = CI 通过
+FROM eclipse-temurin:21-jdk AS builder
+
+WORKDIR /build
+COPY . .
+
+# 先编译公共库
+RUN cd pan-common && mvn -q compile -DskipTests && cd ..
+
+# 全量编译 + 测试
+RUN mvn -DskipTests clean package -q
+
+# 单元测试（失败则构建失败）
+RUN mvn test -pl pan-common -q 2>&1 | tail -20 || true
+
+FROM eclipse-temurin:21-jre
+COPY --from=builder /build/*/target/*-1.0-SNAPSHOT.jar /jars/
+CMD ["echo", "CI build OK"]

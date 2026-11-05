@@ -1,5 +1,5 @@
 # 本地只保留启动引导配置，其余业务配置全部托管到 Nacos（DEFAULT_GROUP）
-# 共享配置：pan-common / pan-mysql / pan-redis / pan-mybatis-plus / pan-sa-token / pan-oss / pan-rabbitmq
+# 共享配置：pan-common / pan-mysql / pan-redis / pan-mybatis / pan-sa-token / pan-oss / pan-rabbitmq
 server:
   port: ${FILE_MANAGE_SERVICE_PORT:8084}
 
@@ -8,13 +8,13 @@ spring:
     name: file-manage-service
   config:
     import:
-      - "optional:nacos:pan-common?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-mysql?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-redis?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-mybatis-plus?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-sa-token?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-oss?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-rabbitmq?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-common?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-mysql?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-redis?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-mybatis?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-sa-token?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-oss?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-rabbitmq?group=pan&refreshEnabled=true"
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}

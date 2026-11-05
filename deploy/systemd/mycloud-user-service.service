@@ -1,0 +1,22 @@
+[Unit]
+Description=myCloud User Service (8081) — 用户/登录/注册/OAuth/空间配额
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/opt/mycloud/.env
+WorkingDirectory=/opt/mycloud
+ExecStart=/usr/bin/java \
+  -Xms128m -Xmx192m \
+  -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+  -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/mycloud/logs \
+  -jar /opt/mycloud/user-service-1.0-SNAPSHOT.jar
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/mycloud/logs/user-service.log
+StandardError=append:/opt/mycloud/logs/user-service.log
+
+[Install]
+WantedBy=multi-user.target

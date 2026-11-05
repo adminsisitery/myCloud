@@ -10,11 +10,11 @@ spring:
     web-application-type: reactive
   config:
     import:
-      - "optional:nacos:pan-common?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-redis?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-sa-token?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-exclude-paths?group=DEFAULT_GROUP&refreshEnabled=true"
-      - "optional:nacos:pan-gateways?group=DEFAULT_GROUP&refreshEnabled=true"
+      - "optional:nacos:pan-common?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-redis?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-sa-token?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-exclude-paths?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-gateways?group=pan&refreshEnabled=true"
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
