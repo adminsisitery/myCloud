@@ -10,15 +10,34 @@ triggers:
         - master
 
 variables:
-  BUILD_IMAGE: mycloud-ci
+  MAVEN_OPTS: "-DskipTests"
+  JDK_VERSION: 21
 
 stages:
-  - stage: build
-    name: 构建验证（JDK21 + Maven）
+  - stage: compile
+    name: 编译阶段
+    displayName: 编译
     steps:
-      - step: image@build
-        name: docker-build
-        displayName: Docker 编译 + 测试
-        dockerfile: ./Dockerfile.ci
-        context: ./
-        imageTag: ${BUILD_IMAGE}:${GITEE_PIPELINE_BUILD_NUMBER}
+      - step: build@maven
+        name: maven-compile
+        displayName: Maven 编译
+        jdkVersion: ${JDK_VERSION}
+        mavenVersion: 3.9.11
+        commands:
+          - mvn -DskipTests compile -q
+
+  - stage: test
+    name: 测试阶段
+    displayName: 单元测试
+    steps:
+      - step: build@maven
+        name: maven-test
+        displayName: Maven 测试
+        jdkVersion: ${JDK_VERSION}
+        mavenVersion: 3.9.11
+        commands:
+          - mvn test -q
+        artifacts:
+          - name: test-report
+            path:
+              - "**/target/surefire-reports/*.xml"
