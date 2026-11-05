@@ -1,6 +1,6 @@
 version: '1.0'
 name: mycloud-ci
-displayName: myCloud CI/CD 流水线
+displayName: myCloud CI/CD
 
 triggers:
   push:
@@ -38,20 +38,3 @@ stages:
           - mvn -DskipTests package -q
           - echo "=== 产物 ==="
           - find . -name "*-1.0-SNAPSHOT.jar" -exec ls -lh {} \;
-
-  - stage: deploy
-    name: 部署阶段
-    displayName: 部署
-    steps:
-      - step: host@deploy
-        name: host-deploy
-        displayName: SSH 部署到服务器
-        hosts:
-          - mycloud-server
-        commands:
-          - |
-            cd /opt/mycloud
-            docker-compose restart
-            sleep 30
-            docker-compose ps
-            curl -s -XPOST localhost:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || true# trigger
