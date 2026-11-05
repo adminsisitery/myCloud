@@ -1,5 +1,6 @@
 version: '1.0'
 name: mycloud-ci
+displayName: myCloud CI/CD 流水线
 
 triggers:
   push:
