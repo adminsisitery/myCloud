@@ -35,7 +35,8 @@ stages:
         jdkVersion: ${JDK_VERSION}
         mavenVersion: 3.9.11
         commands:
-          - mvn test --fail-at-end -q 2>&1 | tail -30
+          - mvn install -DskipTests -q
+          - mvn test -q
 
   - stage: package
     name: 打包阶段
