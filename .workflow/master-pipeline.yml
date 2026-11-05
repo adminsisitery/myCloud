@@ -13,16 +13,48 @@ variables:
   JDK_VERSION: 21
 
 stages:
-  - stage: build
-    name: 构建阶段
-    displayName: 编译打包
+  - stage: compile
+    name: 编译阶段
+    displayName: 编译
     steps:
       - step: build@maven
-        name: maven-build
-        displayName: Maven 编译 + 打包
+        name: maven-compile
+        displayName: Maven 编译
         jdkVersion: ${JDK_VERSION}
         mavenVersion: 3.9.11
         commands:
-          - mvn -DskipTests clean package -q
+          - mvn -DskipTests compile -q
+
+  - stage: package
+    name: 打包阶段
+    displayName: 打包
+    steps:
+      - step: build@maven
+        name: maven-package
+        displayName: Maven 打包
+        jdkVersion: ${JDK_VERSION}
+        mavenVersion: 3.9.11
+        commands:
+          - mvn -DskipTests package -q
           - echo "=== 产物 ==="
           - find . -name "*-1.0-SNAPSHOT.jar" -exec ls -lh {} \;
+
+  - stage: deploy
+    name: 部署阶段
+    displayName: 部署
+    steps:
+      - step: host@deploy
+        name: host-deploy
+        displayName: SSH 部署到服务器
+        hosts:
+          - 47.95.192.221
+        username: root
+        authType: key
+        commands:
+          - |
+            cd /opt/mycloud
+            find ${GITEE_WORKSPACE} -name "*-1.0-SNAPSHOT.jar" -exec cp {} /opt/mycloud/ \;
+            docker-compose build
+            docker-compose up -d
+            sleep 60
+            curl -s -XPOST localhost:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || true
