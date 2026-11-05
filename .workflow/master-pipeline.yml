@@ -54,4 +54,4 @@ stages:
             docker-compose restart
             sleep 30
             docker-compose ps
-            curl -s -XPOST localhost:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || true
+            curl -s -XPOST localhost:8090/api/user/login -H 'Content-Type: application/json' -d '{"username":"test","password":"Test1234"}' || true# trigger
