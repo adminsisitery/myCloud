@@ -23,7 +23,19 @@ stages:
         jdkVersion: ${JDK_VERSION}
         mavenVersion: 3.9.11
         commands:
-          - mvn -DskipTests compile -q
+          - mvn -Dmaven.test.skip=true compile -q
+
+  - stage: test
+    name: 测试阶段
+    displayName: 测试
+    steps:
+      - step: build@maven
+        name: maven-test
+        displayName: Maven 测试
+        jdkVersion: ${JDK_VERSION}
+        mavenVersion: 3.9.11
+        commands:
+          - mvn test -q
 
   - stage: package
     name: 打包阶段
@@ -35,6 +47,6 @@ stages:
         jdkVersion: ${JDK_VERSION}
         mavenVersion: 3.9.11
         commands:
-          - mvn -DskipTests package -q
+          - mvn -Dmaven.test.skip=true package -q
           - echo "=== 产物 ==="
           - find . -name "*-1.0-SNAPSHOT.jar" -exec ls -lh {} \;
