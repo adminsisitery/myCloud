@@ -47,9 +47,7 @@ stages:
         name: host-deploy
         displayName: SSH 部署到服务器
         hosts:
-          - 47.95.192.221
-        username: root
-        authType: key
+          - mycloud-server
         commands:
           - |
             cd /opt/mycloud
