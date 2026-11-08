@@ -47,6 +47,10 @@ jobs:
         run: |
           set -uo pipefail
           args=(--repo . --format sarif --output myrc.sarif --fail-on "${{ vars.MYRC_FAIL_ON || 'high' }}")
+          # 存量问题用 baseline 忽略，只拦新引入的；没有基线文件时退化为全量拦截
+          if [ -f .myrc-baseline.json ]; then
+            args+=(--baseline .myrc-baseline.json)
+          fi
           # PR 只审改动，push 做全量
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             args+=(--base "origin/${{ github.base_ref }}")
