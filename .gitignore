@@ -68,3 +68,6 @@ build/
 !file-share-service/src/main/resources/application.yml
 !file-task-service/src/main/resources/application.yml
 !pan-gateway/src/main/resources/application.yaml
+
+# ===== 部署产物（只保留源码与配置，jar 由 CI 构建）=====
+deploy/jars/
