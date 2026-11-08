@@ -16,6 +16,27 @@ spring:
       - "optional:nacos:pan-exclude-paths?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-gateways?group=pan&refreshEnabled=true"
   cloud:
+    gateway:
+      # 跨域配置。必须放在 globalcors 下：它由 RoutePredicateHandlerMapping 在
+      # 路由匹配阶段处理，OPTIONS 预检不会进入 GlobalFilter 鉴权链。
+      # 若改写成自定义 CorsWebFilter，很容易排在鉴权之后，导致"预检永远 401"。
+      #
+      # 允许来源用环境变量控制，生产改 CORS_ALLOWED_ORIGINS 即可（逗号分隔），
+      # 例如 CORS_ALLOWED_ORIGINS=https://pan.example.com
+      globalcors:
+        # 必须为 true：否则命中不到路由的预检（如 /error）拿不到 CORS 响应头
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+            allowed-methods: "*"
+            allowed-headers: "*"
+            # 下载接口靠 Content-Disposition 传文件名，JS 默认读不到非安全响应头
+            exposed-headers:
+              - Content-Disposition
+              - Content-Length
+            # 预检结果缓存 1 小时，减少 OPTIONS 往返
+            max-age: 3600
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
       # Nacos 开启鉴权后必须提供；密码不落库，走环境变量 NACOS_PASSWORD
