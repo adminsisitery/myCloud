@@ -1,5 +1,6 @@
 # 本地只保留启动引导配置；网关路由、排除路径、Redis、sa-token 全部托管到 Nacos
 # 共享配置：pan-common / pan-redis / pan-sa-token / pan-exclude-paths / pan-gateways
+# globalcors 为临时本地兜底（Nacos 不可用期间），Nacos 恢复后由远程配置覆盖
 server:
   port: ${GATEWAY_PORT:8090}
 
@@ -16,6 +17,29 @@ spring:
       - "optional:nacos:pan-exclude-paths?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-gateways?group=pan&refreshEnabled=true"
   cloud:
+    gateway:
+      # 全局令牌桶：100 请求/秒/用户，桶容量 100，短时突发允许打满桶
+      # 键优先取登录用户（UserId），未登录退回客户端 IP，见 RateLimitConfig
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            key-resolver: "#{@userKeyResolver}"
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 100
+            redis-rate-limiter.requestedTokens: 1
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns:
+              - "http://localhost:5173"
+              - "http://127.0.0.1:5173"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            exposed-headers:
+              - Content-Disposition
+              - Content-Length
+            max-age: 3600
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
       # Nacos 开启鉴权后必须提供；密码不落库，走环境变量 NACOS_PASSWORD
@@ -28,3 +52,17 @@ spring:
         refresh-enabled: true
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
+
+# 登录/注册类接口的入口加固限流（按 IP 固定窗口计数），与 default-filters 的全局令牌桶叠加
+# 令牌桶只支持整数「每秒」速率，表达不了 5 次/分钟，故这层单独实现
+pan:
+  rate-limit:
+    login:
+      enabled: true
+      permits: 5
+      window-seconds: 60
+      paths:
+        - /api/user/login
+        - /api/user/register
+        - /api/user/verification-code
+        - /api/auth/github/**
