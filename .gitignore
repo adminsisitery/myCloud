@@ -71,3 +71,7 @@ build/
 
 # ===== 部署产物（只保留源码与配置，jar 由 CI 构建）=====
 deploy/jars/
+
+# ===== myRC 审计产物（baseline 入库，缓存与报告不入库）=====
+.myrc-cache/
+myrc.sarif
