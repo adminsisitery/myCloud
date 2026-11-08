@@ -2,139 +2,161 @@
 # myCloud Docker Compose —— 在服务器 /opt/mycloud/ 下执行:
 #   docker compose build && docker compose up -d
 # ============================================================
-# 所有服务使用 host 网络，直接走 localhost 连中间件，
-# .env 文件不需要任何修改。
+# 网络模型：
+#   - 全部服务接入自定义 bridge 网络 mycloud，容器之间用服务名互访
+#   - 只有 gateway 发布 8090 到宿主机，其余服务不映射任何端口
+#   - 中间件（Redis/RabbitMQ/ES/PG/Nacos）跑在宿主机上，
+#     容器经由 host.docker.internal 访问（依赖 extra_hosts: host-gateway）
+#
+# 与 deploy.sh + systemd 部署路径共存：
+#   .env 里仍是 localhost（systemd 直跑宿主进程时正确），
+#   compose 用 environment 覆盖成 host.docker.internal，互不影响。
+#
+# 前置条件（宿主机中间件必须对外监听，不能只绑 127.0.0.1）：
+#   Redis      bind 0.0.0.0（或 protected-mode no + 密码）
+#   RabbitMQ   默认监听 0.0.0.0
+#   ES         network.host: 0.0.0.0
+#   PG         listen_addresses = '*'
+#   Nacos      监听 0.0.0.0:8848
 # ============================================================
+
+# 中间件地址覆盖（覆盖 .env 中的 localhost，仅容器内生效）
+x-middleware-env: &middleware-env
+  NACOS_SERVER_ADDR: host.docker.internal:8848
+  REDIS_HOST: host.docker.internal
+  RABBITMQ_HOST: host.docker.internal
+  ELASTICSEARCH_URIS: http://host.docker.internal:9200
+  PGVECTOR_HOST: host.docker.internal
+  # 服务间已全部走 Feign + Nacos 服务发现，这两个变量当前无代码引用，
+  # 仍指向服务名，避免将来有人用 RestClient 时误连容器自身 localhost
+  USER_SERVICE_URL: http://user-service:8081
+  FILE_MANAGE_SERVICE_URL: http://file-manage-service:8084
+
+# 公共构建/运行配置
+x-service-base: &service-base
+  env_file: .env
+  environment:
+    <<: *middleware-env
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  networks:
+    - mycloud
+  restart: always
 
 services:
   gateway:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: pan-gateway-1.0-SNAPSHOT.jar
     container_name: mycloud-gateway
-    network_mode: host
-    env_file: .env
-    restart: always
+    # 唯一对外端口
+    ports:
+      - "8090:8090"
     mem_limit: 400m
 
   user-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: user-service-1.0-SNAPSHOT.jar
     container_name: mycloud-user-service
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-upload:
+  file-upload-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-upload-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-upload
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-download:
+  file-download-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-download-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-download
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-manage:
+  file-manage-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-manage-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-manage
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-share:
+  file-share-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-share-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-share
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-async:
+  file-async-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-async-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-async
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-preview:
+  file-preview-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-preview-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-preview
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
   ai-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: ai-service-1.0-SNAPSHOT.jar
     container_name: mycloud-ai-service
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 512m
 
-  file-search:
+  file-search-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-search-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-search
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
 
-  file-task:
+  file-task-service:
+    <<: *service-base
     build:
       context: .
       dockerfile: Dockerfile
       args:
         JAR_FILE: file-task-service-1.0-SNAPSHOT.jar
     container_name: mycloud-file-task
-    network_mode: host
-    env_file: .env
-    restart: always
     mem_limit: 400m
+
+networks:
+  mycloud:
+    driver: bridge
