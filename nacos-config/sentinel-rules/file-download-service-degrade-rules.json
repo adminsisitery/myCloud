@@ -1,0 +1,19 @@
+[
+  {
+    "resource": "POST:http://file-manage-service/internal/recent/record",
+    "grade": 0,
+    "count": 2000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "POST:http://file-manage-service/internal/recent/record",
+    "grade": 1,
+    "count": 0.5,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000
+  }
+]

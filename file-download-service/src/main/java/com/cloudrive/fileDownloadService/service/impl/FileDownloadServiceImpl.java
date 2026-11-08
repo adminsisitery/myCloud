@@ -10,6 +10,7 @@ import com.cloudrive.fileDownloadService.service.StorageService;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.exceotion.BusinessException;
 import com.cloudrive.pan_common.util.UserContext;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -25,6 +26,7 @@ import java.io.InputStream;
  * @author 飞飞
  * @date 2026/6/27
  */
+@Slf4j
 @Service
 public class FileDownloadServiceImpl implements FileDownloadService {
 
@@ -57,8 +59,12 @@ public class FileDownloadServiceImpl implements FileDownloadService {
         if (Boolean.TRUE.equals(file.getIsFolder())) {
             throw new BusinessException(ErrorCode.CANNOT_DOWNLOAD_FOLDER);
         }
-        // 记录最近访问（内部接口失败不阻断下载）
-        manageServiceClient.recordAccess(currentUserId, fileId);
+        // 记录最近访问：旁路埋点，内部接口异常或熔断都不阻断下载
+        try {
+            manageServiceClient.recordAccess(currentUserId, fileId);
+        } catch (Exception e) {
+            log.warn("写入最近访问失败 userId={} fileId={}", currentUserId, fileId, e);
+        }
 
         String filename = file.getOriginalFilename();
         if (filename == null || filename.isBlank()) {

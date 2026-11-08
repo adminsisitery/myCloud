@@ -207,6 +207,14 @@
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
 
+
+        <!-- Sentinel 规则数据源：熔断规则从 Nacos 拉取，避免应用重启后规则回滚 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-sentinel-datasource</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
 </dependencies>
 
     <build>

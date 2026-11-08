@@ -19,6 +19,7 @@ spring:
       - "optional:nacos:pan-mail?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-ai?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-elasticsearch?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-Sentinel?group=pan&refreshEnabled=true"
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}

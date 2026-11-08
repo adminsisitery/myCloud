@@ -16,6 +16,7 @@ spring:
       - "optional:nacos:pan-sa-token?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-exclude-paths?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-gateways?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-Sentinel?group=pan&refreshEnabled=true"
   cloud:
     gateway:
       # 全局令牌桶：100 请求/秒/用户，桶容量 100，短时突发允许打满桶

@@ -1,0 +1,21 @@
+spring:
+  cloud:
+    sentinel:
+      transport:
+        # Dashboard 是独立进程，端口不要用业务端口（8081/8090 等已被占用）
+        # 客户端与 Dashboard 的通信端口不写死：默认从 8719 起找空闲端口，同机多服务不会撞车
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+      # 启动即向 Dashboard 注册，否则要等第一次请求才出现在界面上
+      eager: true
+      # 熔断规则持久化：每个服务一个 dataId，互不覆盖
+      # 注意：Dashboard 上改的规则不会写回 Nacos，要固化必须直接改这里的 JSON
+      datasource:
+        degrade:
+          nacos:
+            server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
+            group-id: SENTINEL_GROUP
+            data-id: ${spring.application.name}-degrade-rules
+            data-type: json
+            rule-type: degrade
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}

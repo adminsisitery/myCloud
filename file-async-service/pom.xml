@@ -189,6 +189,14 @@
         </dependency>
 
 
+        <!-- Sentinel 规则数据源：熔断规则从 Nacos 拉取，避免应用重启后规则回滚 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-sentinel-datasource</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
+
         <!-- 单元测试：JUnit 5 + Mockito + AssertJ，由 spring-boot-starter-test 一并带入 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

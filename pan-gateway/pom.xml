@@ -75,6 +75,14 @@
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
 
+
+        <!-- Sentinel 规则数据源：熔断规则从 Nacos 拉取，避免应用重启后规则回滚 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-alibaba-sentinel-datasource</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+
         <!-- 网关用 Sentinel 的 Gateway 适配器，规则维度按 routeId / API 分组 -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

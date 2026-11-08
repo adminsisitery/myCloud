@@ -1,0 +1,39 @@
+server:
+  shutdown: graceful
+  max-http-request-header-size: 32KB
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    dev.langchain4j: WARN
+    com.cloudrive: INFO
+
+# Feign 熔断接入
+# feign.sentinel.enabled 是总开关：为 true 时 Sentinel 接管 Feign，每个 Feign 调用
+# 才会产生资源点（POST:http://user-service/internal/space/reserve 这类），熔断规则才有对象可配
+feign:
+  sentinel:
+    enabled: true
+  client:
+    config:
+      default:
+        # 没有合理的超时就没有熔断：默认 readTimeout 60s，下游卡住时上游线程先被耗尽，
+        # 慢调用统计也失去意义
+        connectTimeout: 2000
+        readTimeout: 5000
+
+# 服务间内部调用地址：容器部署时用环境变量指向服务名，例如 http://user-service:8081
+user-service:
+  base-url: ${USER_SERVICE_URL:http://localhost:8081}
+file-manage-service:
+  base-url: ${FILE_MANAGE_SERVICE_URL:http://localhost:8084}

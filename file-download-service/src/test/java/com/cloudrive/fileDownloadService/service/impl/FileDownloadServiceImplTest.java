@@ -159,19 +159,16 @@ class FileDownloadServiceImplTest {
     }
 
     @Test
-    @DisplayName("prepareDownload：recordAccess 失败会直接抛出（与用例文档「不阻断下载」的预期不符）")
-    void prepareDownload_记录访问失败会阻断下载() {
+    @DisplayName("prepareDownload：recordAccess 失败不阻断下载")
+    void prepareDownload_记录访问失败不阻断下载() {
         when(fileInfoMapper.selectOne(any())).thenReturn(file(false));
         doThrow(new RuntimeException("manage service down")).when(manageServiceClient).recordAccess(anyLong(), anyLong());
 
         try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
             ctx.when(UserContext::getCurrentUserId).thenReturn(USER_ID);
 
-            // 实现里 recordAccess 外面没有 try/catch，内部接口一挂，下载也跟着失败。
-            // TEST-CASES.md 写的是「失败不阻断下载」，这里按实际行为断言并标出来——
-            // 如果哪天补了 try/catch，这条会变红，正好提醒把断言改成「正常返回」。
-            Throwable thrown = catchThrowable(() -> service.prepareDownload(FILE_ID));
-            assertThat(thrown).isInstanceOf(RuntimeException.class);
+            // 最近访问是旁路埋点：内部接口异常、超时或熔断打开都只记日志，下载元信息照常返回
+            assertThat(service.prepareDownload(FILE_ID)).isNotNull();
         }
     }
 

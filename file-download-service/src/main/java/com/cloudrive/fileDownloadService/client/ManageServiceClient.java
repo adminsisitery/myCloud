@@ -15,7 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
  * @author 飞飞
  * @date 2026/10/19
  */
-@FeignClient(name = "file-manage-service", path = "/internal/recent")
+@FeignClient(name = "file-manage-service", path = "/internal/recent",
+        fallbackFactory = ManageServiceClientFallbackFactory.class)
 public interface ManageServiceClient {
 
     /**
