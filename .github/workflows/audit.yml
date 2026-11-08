@@ -1,0 +1,69 @@
+name: 代码审计
+
+# 审计对所有分支生效：它只读代码、不改产物，不存在部署风险，
+# 早期发现问题比省 CI 分钟数更重要。
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+  # 上传 SARIF 到 GitHub 代码扫描需要这个权限
+  security-events: write
+
+jobs:
+  myrc:
+    # myRC 尚未发布到 PyPI，必须从源码仓库拉取。
+    # 仓库变量 MYRC_REPO 未配置时整个 job 跳过，避免新分支一提交就红。
+    if: vars.MYRC_REPO != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 增量审计要拿 base 分支做 diff，浅克隆取不到
+          fetch-depth: 0
+
+      - name: 拉取 myRC
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.MYRC_REPO }}
+          ref: ${{ vars.MYRC_REF || 'main' }}
+          path: .myrc-tool
+          # 私有仓库需要 PAT（secrets.MYRC_TOKEN）；公开仓库留空即可
+          token: ${{ secrets.MYRC_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装 myRC
+        run: |
+          python -m pip install --upgrade pip
+          pip install "./.myrc-tool[external,quality]"
+          myrc --version
+
+      - name: 执行审计
+        run: |
+          set -uo pipefail
+          args=(--repo . --format sarif --output myrc.sarif --fail-on "${{ vars.MYRC_FAIL_ON || 'high' }}")
+          # PR 只审改动，push 做全量
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            args+=(--base "origin/${{ github.base_ref }}")
+          fi
+          echo "执行：myrc audit run ${args[*]}"
+          myrc audit run "${args[@]}"
+
+      - name: 上传 SARIF 到代码扫描
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: myrc.sarif
+
+      - name: 留档审计报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: myrc-sarif
+          path: myrc.sarif
+          if-no-files-found: warn

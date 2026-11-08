@@ -1,0 +1,11 @@
+# myCloud 审计策略
+# 构建产物、本地缓存、部署包不参与扫描：它们不是源码，扫了只会有噪音和超时。
+[audit]
+exclude = [
+  "**/target/**",
+  "deploy/jars/**",
+  ".workbuddy/**",
+  "logs/**",
+  "docs/**",
+]
+strict = false
