@@ -1,0 +1,53 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/user/**,/api/auth/github/**
+        - id: file-upload-service
+          uri: lb://file-upload-service
+          predicates:
+            - Path=/api/chunk/**,/api/direct-upload/**,/api/upload-progress/**,/api/files/progress,/api/files/check,/api/files/fast-upload
+        - id: file-download-service
+          uri: lb://file-download-service
+          predicates:
+            - Path=/api/files/*/content,/api/file/*/content,/api/folder-download-tasks,/api/folder-download-tasks/**
+        - id: file-preview-service
+          uri: lb://file-preview-service
+          predicates:
+            - Path=/api/files/preview,/api/files/preview/**
+        - id: file-search-service
+          uri: lb://file-search-service
+          predicates:
+            - Path=/api/files/search
+        - id: file-manage-service
+          uri: lb://file-manage-service
+          predicates:
+            - Path=/api/files,/api/files/**,/api/file/folder
+        - id: file-share
+          uri: lb://file-share-service
+          predicates:
+            - Path=/api/shares,/api/shares/**
+        - id: file-async-service-ws
+          uri: lb://file-async-service
+          predicates:
+            - Path=/ws/message
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**,/admin/ai/cost/**
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns:
+              - "http://localhost:5173"
+              - "http://127.0.0.1:5173"
+            allowed-methods: "*"
+            allowed-headers: "*"
+            exposed-headers:
+              - Content-Disposition
+              - Content-Length
+            max-age: 3600
