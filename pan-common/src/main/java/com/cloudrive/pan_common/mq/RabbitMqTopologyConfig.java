@@ -123,7 +123,9 @@ public class RabbitMqTopologyConfig {
 
     @Bean
     public Queue logQueue() {
-        return QueueBuilder.durable(MqNames.Log.QUEUE).build();
+        // 重试 3 次仍失败时转死信，否则 default-requeue-rejected=false 会让消息直接消失
+        // 注意：队列已存在且参数不同时启动会 PRECONDITION_FAILED，升级需先删旧队列或改用 Broker policy
+        return QueueBuilder.durable(MqNames.Log.QUEUE).withArguments(dlxArgs()).build();
     }
 
     @Bean

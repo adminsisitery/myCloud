@@ -37,7 +37,7 @@ public class OperationLog {
 
     private String clientIp;
 
-    /** 生产端生成的消息 ID，用于消费幂等 */
+    /** 生产端生成的消息 ID，对应 operation_log.uk_msg_id，消费幂等的唯一依据 */
     private String msgId;
 
     private LocalDateTime createTime;
