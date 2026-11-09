@@ -41,7 +41,7 @@ jobs:
           set -uo pipefail
           # 默认只出报告不拦构建：存量问题（依赖 CVE 等）还没清完，
           # 先用 SARIF 在代码扫描里看，等 baseline 建好再把 MYRC_FAIL_ON 设为 high。
-          args=(--repo . --format sarif --output myrc.sarif --fail-on "${{ vars.MYRC_FAIL_ON || 'none' }}")
+          args=(--repo . --fail-on "${{ vars.MYRC_FAIL_ON || 'none' }}")
           # 有基线时只报新增问题，历史债务不重复出现
           if [ -f .myrc-baseline.json ]; then
             args+=(--baseline .myrc-baseline.json)
@@ -50,8 +50,48 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             args+=(--base "origin/${{ github.base_ref }}")
           fi
-          echo "执行：myrc audit run ${args[*]}"
-          myrc audit run "${args[@]}"
+          # 先出 JSON：机器可读，用来统计各扫描器到底跑了多少。
+          # SARIF 只给代码扫描用，看不出覆盖情况。
+          echo "执行：myrc audit run ${args[*]} --format json"
+          myrc audit run "${args[@]}" --format json --output myrc-report.json
+          # 第二次换 SARIF 格式，扫描结果走缓存，只多几秒
+          echo "执行：myrc audit run ${args[*]} --format sarif"
+          myrc audit run "${args[@]}" --format sarif --output myrc.sarif
+
+      # 把「每个扫描器扫出多少条」打进 Job Summary。
+      # 只看「0 个问题」无法判断是真的干净，还是扫描器根本没跑起来。
+      - name: 审计摘要
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os, pathlib
+          p = pathlib.Path("myrc-report.json")
+          if not p.exists():
+              print("未生成 myrc-report.json，审计未执行完。")
+              raise SystemExit(0)
+          r = json.loads(p.read_text(encoding="utf-8"))
+          print(f"### 审计结果：{len(r.get('findings', []))} 个问题")
+          print()
+          print(f"- 文件：{r.get('files_scanned')}　耗时：{r.get('duration_seconds'):.0f}s"
+                f"　缓存：{'命中' if r.get('cache_hit') else '未命中'}")
+          print(f"- baseline 忽略：{r.get('baseline_count')}　内联抑制：{r.get('suppressed_count')}")
+          print(f"- 决策：`{r.get('decision')}`")
+          print()
+          print("| 扫描器 | 发现 | 错误 | 耗时(s) |")
+          print("| --- | ---: | ---: | ---: |")
+          for m in r.get("scanner_metrics", []):
+              print(f"| {m.get('name')} | {m.get('findings')} | {m.get('errors')} | "
+                    f"{m.get('duration_seconds', 0):.1f} |")
+          gaps = r.get("errors") or []
+          if gaps:
+              print()
+              print(f"**覆盖缺口 {len(gaps)} 项**")
+              print()
+              print("| 扫描器 | 文件 | 原因 |")
+              print("| --- | --- | --- |")
+              for g in gaps[:20]:
+                  print(f"| {g.get('scanner')} | {g.get('file') or '-'} | {g.get('message')} |")
+          PY
 
       - name: 上传 SARIF 到代码扫描
         if: always()
@@ -81,6 +121,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: myrc-sarif
-          path: myrc.sarif
+          name: myrc-report
+          # JSON 存全量明细（含扫描器指标、覆盖缺口），SARIF 给代码扫描
+          path: |
+            myrc.sarif
+            myrc-report.json
           if-no-files-found: warn
