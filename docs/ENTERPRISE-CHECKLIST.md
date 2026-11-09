@@ -236,6 +236,44 @@ WOODPECKER_AGENT_SECRET=<REDACTED>   # 明文入库，删
 
 # P1 —— 建门禁
 
+## P1-0　配额账目的一致性缺口
+
+**背景**
+
+配额归属划给 user-service 之后，`reserve` / `release` / `add` 从「一次本地 UPDATE」变成了「一次跨服务同步 RPC」。扣减本身仍是安全的——`UserCenterMapper.reserveSpace` 是一条带 `used_space + size <= total_space` 守卫的原子 UPDATE，行锁保证多实例并发只有一个成功，不会超卖。问题全部出在**调用方的幂等与补偿**。
+
+已修：`deleteSingleFile` 缺 `isDeleted` 守卫，同一个文件删两次会退两次配额（`2a5e9a3`，`RecycleBinIdempotencyTest` 锁住）。以下四条未修。
+
+**① `addUsedSpace` 没有任何守卫** —— 逻辑超卖
+
+`UPDATE user_center SET used_space = used_space + #{size}`，不检查 `total_space`。触发路径：删文件到回收站（退配额）→ 上传新文件占满 → 从回收站恢复旧文件 → `used_space > total_space`。不需要任何故障，正常操作即可复现。
+
+改法：要么加 `WHERE used_space + #{size} <= total_space` 并在 0 行时返回错误让前端提示「空间不足，无法恢复」，要么明确接受这个行为（但得写进产品文档，不能是「谁也不知道」）。
+
+**② 熔断降级静默吞掉补偿动作**
+
+`UserSpaceClientFallbackFactory` 里 `reserveSpace` 返回 `false`（安全侧，正确），但 `releaseSpace` / `addUsedSpace` 只有 `log.warn`。user-service 发版或熔断期间，退还和回补直接丢失，**账永久漂移且无人知晓**。
+
+改法：降级时把补偿动作写进一张 `space_compensation` 表（或 Redis 延迟队列），由 `file-task-service` 定时重放，重放成功再删。日志不算补偿。
+
+**③ `tryMarkSpaceReleased` 的「先标记、失败回滚标记」在超时场景下不幂等**
+
+远程调用**已经成功**但客户端读超时（`readTimeout: 5000`）时，catch 到异常 → `unmarkSpaceReleased` 回滚标记 → 下一轮重试再退一次。标记保护的是「本地重复触发」，保护不了「远端已生效但结果未知」。
+
+改法：`/internal/space/*` 引入幂等键（`requestId` 用 `taskId` / `fileId`），user-service 建 `space_op_log(request_id UNIQUE)` 去重。这是治本方案，能同时覆盖 ② 的重放场景。
+
+**④ 没有对账任务**
+
+`used_space` 与 `SUM(t_file_info.file_size WHERE is_deleted = 0)` 之间没有任何校验。上面三条造成的任何漂移都发现不了，只能等用户投诉「我明明删了文件空间没回来」。
+
+改法：`file-task-service` 加每日对账任务（现成的 `@Scheduled + Redisson tryLock` 框架），差异超阈值告警。成本很低，兜住所有还没想到的漂移。
+
+**顺带记一个不是 bug 但要知道的耦合**
+
+`reserve` 是同步 RPC（connect 2s / read 5s），user-service 重启期间降级返回 `false` → **全站上传失败**。单体时代这是本地 SQL，一个服务的可用性现在绑住了所有写路径。要做发布窗口评估的话，这条得算进去。
+
+---
+
 ## P1-1　JaCoCo 覆盖率门禁
 
 **改什么**
