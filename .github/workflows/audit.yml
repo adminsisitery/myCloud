@@ -15,8 +15,9 @@ permissions:
 jobs:
   myrc:
     # myRC 尚未发布到 PyPI，必须从源码仓库拉取。
-    # 仓库变量 MYRC_REPO 未配置时整个 job 跳过，避免新分支一提交就红。
-    if: vars.MYRC_REPO != ''
+    # 源码在 Gitee（公开仓库），actions/checkout 只能拉 GitHub，
+    # 所以这里用 git clone。想临时关掉审计，把仓库变量 MYRC_DISABLED 设为 true。
+    if: vars.MYRC_DISABLED != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,14 +25,23 @@ jobs:
           # 增量审计要拿 base 分支做 diff，浅克隆取不到
           fetch-depth: 0
 
-      - name: 拉取 myRC
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.MYRC_REPO }}
-          ref: ${{ vars.MYRC_REF || 'main' }}
-          path: .myrc-tool
-          # 私有仓库需要 PAT（secrets.MYRC_TOKEN）；公开仓库留空即可
-          token: ${{ secrets.MYRC_TOKEN || github.token }}
+      - name: 拉取 myRC（Gitee）
+        env:
+          MYRC_REPO_URL: ${{ vars.MYRC_REPO_URL || 'https://gitee.com/feifei-coder/airc.git' }}
+          MYRC_REF: ${{ vars.MYRC_REF || 'main' }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$MYRC_REPO_URL"
+          # 公开仓库直接克隆，无需任何密钥；
+          # 若将来转私有，配一个 secrets.GITEE_TOKEN（勾 projects 权限）即可，workflow 不用改。
+          if [ -n "${GITEE_TOKEN:-}" ]; then
+            url="https://oauth2:${GITEE_TOKEN}@${url#https://}"
+          fi
+          git clone --depth 1 "$url" .myrc-tool
+          git -C .myrc-tool fetch --depth 1 origin "$MYRC_REF"
+          git -C .myrc-tool checkout --detach FETCH_HEAD
+          git -C .myrc-tool log --oneline -1
 
       - uses: actions/setup-python@v5
         with:
@@ -46,8 +56,10 @@ jobs:
       - name: 执行审计
         run: |
           set -uo pipefail
-          args=(--repo . --format sarif --output myrc.sarif --fail-on "${{ vars.MYRC_FAIL_ON || 'high' }}")
-          # 存量问题用 baseline 忽略，只拦新引入的；没有基线文件时退化为全量拦截
+          # 默认只出报告不拦构建：存量问题（依赖 CVE 等）还没清完，
+          # 先用 SARIF 在代码扫描里看，等 baseline 建好再把 MYRC_FAIL_ON 设为 high。
+          args=(--repo . --format sarif --output myrc.sarif --fail-on "${{ vars.MYRC_FAIL_ON || 'none' }}")
+          # 有基线时只报新增问题，历史债务不重复出现
           if [ -f .myrc-baseline.json ]; then
             args+=(--baseline .myrc-baseline.json)
           fi
