@@ -87,6 +87,13 @@ public class RecycleBinServiceImpl implements RecycleBinService {
         if (!Objects.equals(root.getUserId(), currentUserId)) {
             ExceptionUtil.throwBizException(ErrorCode.NO_PERMISSION);
         }
+        // 已在回收站的文件不能再被"删除"一次。
+        // 这里没有 @TableLogic，getById 查得到已删行，缺了这道判断就会重复执行
+        // releaseSpace —— 用户删同一个文件两次，配额就被退还两次，可无限刷。
+        // 与 restoreFile 的 FILE_NOT_IN_TRASH 对称，也是 ai-service 同名方法里已有的守卫。
+        if (Boolean.TRUE.equals(root.getIsDeleted())) {
+            ExceptionUtil.throwBizException(ErrorCode.FILE_NOT_FOUND);
+        }
         List<FileInfo> targets = collectTargets(root, currentUserId);
         long totalSize = 0L;
         LocalDateTime now = LocalDateTime.now();
