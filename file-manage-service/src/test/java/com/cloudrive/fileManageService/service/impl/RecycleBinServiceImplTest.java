@@ -259,7 +259,8 @@ class RecycleBinServiceImplTest {
     void tureDeleteFile_唯一引用时删物理对象() {
         FileInfo f = file(1L, USER_ID, false, 10L, true);
         when(fileInfoMapperService.getById(1L)).thenReturn(f);
-        when(fileInfoMapperService.countFiles("hash-1")).thenReturn(1L);
+        // 计数口径是「未删除的其它行」，唯一引用对应 0
+        when(fileInfoMapperService.countFiles("hash-1")).thenReturn(0L);
 
         try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
             ctx.when(UserContext::getCurrentUserId).thenReturn(USER_ID);
@@ -305,7 +306,7 @@ class RecycleBinServiceImplTest {
     void tureDeleteFile_OSS失败仍删记录() {
         FileInfo f = file(1L, USER_ID, false, 10L, true);
         when(fileInfoMapperService.getById(1L)).thenReturn(f);
-        when(fileInfoMapperService.countFiles("hash-1")).thenReturn(1L);
+        when(fileInfoMapperService.countFiles("hash-1")).thenReturn(0L);
         doThrow(new RuntimeException("oss error")).when(storageService).deleteFile(anyString());
 
         try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
@@ -435,11 +436,13 @@ class RecycleBinServiceImplTest {
     @DisplayName("cleanTrash：文件夹不删 OSS 对象，普通文件按引用数决定")
     void cleanTrash_按类型与引用数删除() {
         FileInfo folder = file(1L, USER_ID, true, null, true);
-        FileInfo single = file(2L, USER_ID, false, 10L, true);   // 唯一引用
-        FileInfo shared = file(3L, USER_ID, false, 10L, true);   // 多引用
+        FileInfo single = file(2L, USER_ID, false, 10L, true);   // 无活文件引用
+        FileInfo shared = file(3L, USER_ID, false, 10L, true);   // 仍被其他活文件引用
 
         when(fileInfoMapperService.getTrashFile(USER_ID)).thenReturn(List.of(folder, single, shared));
-        when(fileInfoMapperService.countFiles("hash-2")).thenReturn(1L);
+        // countFiles 只统计 is_deleted = false 的行，待清理的这条自己不在计数里，
+        // 所以「唯一引用」对应的是 0 而不是 1
+        when(fileInfoMapperService.countFiles("hash-2")).thenReturn(0L);
         when(fileInfoMapperService.countFiles("hash-3")).thenReturn(2L);
 
         try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
@@ -449,6 +452,24 @@ class RecycleBinServiceImplTest {
 
         verify(storageService, times(1)).deleteFile(anyString());
         verify(fileInfoMapperService, times(3)).removeById(anyLong());
+    }
+
+    @Test
+    @DisplayName("cleanTrash：还有 1 个活文件共用同一 sha256 → 不得删 OSS 对象")
+    void cleanTrash_存在一处活引用时不删物理对象() {
+        // 秒传场景：A、B 两个文件 sha256 相同，A 在回收站被清理，B 仍在使用。
+        // 若判成「引用数 <= 1 就可删」，B 的内容会被一起删掉且无法恢复。
+        FileInfo trashed = file(2L, USER_ID, false, 10L, true);
+        when(fileInfoMapperService.getTrashFile(USER_ID)).thenReturn(List.of(trashed));
+        when(fileInfoMapperService.countFiles("hash-2")).thenReturn(1L);
+
+        try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
+            ctx.when(UserContext::getCurrentUserId).thenReturn(USER_ID);
+            service.cleanTrash();
+        }
+
+        verifyNoInteractions(storageService);
+        verify(fileInfoMapperService).removeById(2L);
     }
 
     @Test

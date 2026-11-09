@@ -403,6 +403,12 @@ public class RecycleBinServiceImpl implements RecycleBinService {
 
     /**
      * 若物理对象无其他引用则从 OSS 删除（失败仅记日志，不阻断数据库删除）
+     * <p>
+     * 判定必须是 {@code == 0} 而不是 {@code <= 1}：{@code countFiles} 只统计
+     * {@code is_deleted = false} 的行，当前这条待清理记录本身不在其中。
+     * 也就是说计数为 1 时，说明<b>还有另一个活文件</b>通过秒传共用同一个 sha256，
+     * 此时删掉 OSS 对象会让那个文件永久损坏。
+     * </p>
      *
      * @param file 文件
      */
@@ -411,7 +417,7 @@ public class RecycleBinServiceImpl implements RecycleBinService {
             return;
         }
         Long referenceCount = fileInfoMapperService.countFiles(file.getSha256Hash());
-        if (referenceCount != null && referenceCount <= 1) {
+        if (referenceCount != null && referenceCount == 0) {
             try {
                 storageService.deleteFile(file.getPath());
             } catch (RuntimeException e) {
