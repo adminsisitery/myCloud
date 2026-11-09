@@ -88,5 +88,18 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
+
+        <!--
+          Feign 请求拦截器（服务间鉴权注入 header）需要 RequestInterceptor 接口。
+          用 optional：只有开启了 OpenFeign 的服务才会带上这个依赖，
+          不用 Feign 的服务（如 user-service）不会被迫引入 feign。
+          版本对齐 spring-cloud 2023.0.3 自带的 feign-core 12.5，接口签名稳定。
+        -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-core</artifactId>
+            <version>12.5</version>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 </project>

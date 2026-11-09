@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 最近访问记录内部接口
  * <p>
  * 供 file-download-service 在开始下载前回调，写入 t_recent_access。
- * 与原单体「下载即记录最近访问」的行为保持一致；仅限内网调用，未做服务间鉴权
- * （与 user-service /internal/space/* 现状一致）。
+ * 仅限内网调用：pan-common 的 {@code InternalAuthWebConfig} 已对 {@code /internal/**}
+ * 统一挂了服务间鉴权（X-Internal-Token + 时间戳），调用方由 Feign 拦截器自动注入。
  * </p>
  *
  * @author 飞飞

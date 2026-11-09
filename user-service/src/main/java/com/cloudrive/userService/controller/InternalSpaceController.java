@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
  * </p>
  * <p>
  * 安全说明：路径以 /internal 开头，网关没有对应路由，外部流量打不进来；
- * 服务间直连只能发生在内网。后续如需加密，可加服务间鉴权。
+ * 服务间调用由 pan-common 的 {@code InternalAuthWebConfig} 统一鉴权
+ * （校验 X-Internal-Token 与时间戳，防重放），调用方由 Feign 拦截器自动注入请求头。
+ * 未配置 {@code pan.internal.token} 时一律 401，避免漏配导致接口裸奔。
  * </p>
  *
  * @author 飞飞

@@ -37,3 +37,13 @@ user-service:
   base-url: ${USER_SERVICE_URL:http://localhost:8081}
 file-manage-service:
   base-url: ${FILE_MANAGE_SERVICE_URL:http://localhost:8084}
+
+# 服务间鉴权：/internal/** 要求 X-Internal-Token + X-Internal-Timestamp
+# token 只从环境变量注入，仓库和配置中心都不落明文。
+# 留空时服务端一律拒绝内部调用（fail closed）——漏配的后果是接口不可用，而不是悄悄裸奔。
+pan:
+  internal:
+    token: ${INTERNAL_TOKEN:}
+    # 时间戳容差，超出即视为重放
+    tolerance: 60s
+
