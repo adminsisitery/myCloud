@@ -38,10 +38,14 @@ jobs:
           if [ -n "${GITEE_TOKEN:-}" ]; then
             url="https://oauth2:${GITEE_TOKEN}@${url#https://}"
           fi
-          git clone --depth 1 "$url" .myrc-tool
-          git -C .myrc-tool fetch --depth 1 origin "$MYRC_REF"
-          git -C .myrc-tool checkout --detach FETCH_HEAD
-          git -C .myrc-tool log --oneline -1
+          # 必须克隆到工作区之外：myRC 自带 benchmarks/cases（故意写坏的样本代码），
+          # 放进仓库里会被自己扫到，报出几十条误报。
+          tool_dir="$RUNNER_TEMP/myrc-tool"
+          git clone --depth 1 "$url" "$tool_dir"
+          git -C "$tool_dir" fetch --depth 1 origin "$MYRC_REF"
+          git -C "$tool_dir" checkout --detach FETCH_HEAD
+          git -C "$tool_dir" log --oneline -1
+          echo "MYRC_TOOL_DIR=$tool_dir" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -50,8 +54,26 @@ jobs:
       - name: 安装 myRC
         run: |
           python -m pip install --upgrade pip
-          pip install "./.myrc-tool[external,quality]"
+          # semgrep 走 Python 包；dependency-audit 带 pip-audit，缺了就没有依赖漏洞结论
+          pip install "$MYRC_TOOL_DIR[semgrep,dependency-audit,external,quality]"
           myrc --version
+
+      - name: 安装系统扫描器
+        # 装不上不阻塞：缺失会记进报告的“覆盖缺口”，不会静默跳过
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # gitleaks：密钥扫描（含 git 历史）
+          tag=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+          if [ -n "$tag" ]; then
+            ver="${tag#v}"
+            curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/${tag}/gitleaks_${ver}_linux_x64.tar.gz" \
+              | sudo tar -xz -C /usr/local/bin gitleaks
+          fi
+          # trivy：依赖 CVE + IaC/容器配置
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          gitleaks version || true
+          trivy --version || true
 
       - name: 执行审计
         run: |
