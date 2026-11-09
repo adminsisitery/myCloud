@@ -93,3 +93,27 @@ spring:
             max-age: 3600
             # 不需要 allow-credentials：token 走 Authorization 头不走 Cookie
             # （pan-sa-token 里 is-read-cookie: false），不存在凭据模式
+    # 网关熔断：对象是路由而不是 Feign，所以规则类型是 gw-degrade，resource 填路由 ID
+    # 注意：这里不能配 rule-type=degrade，那种规则对网关不生效
+    sentinel:
+      scg:
+        # SentinelGatewayFilter 的执行顺序，要早于路由转发，
+        # 否则拿不到 route id，规则匹配不上
+        order: -1
+        # 熔断打开时返回统一 JSON。不配的话是英文纯文本 "Blocked by Sentinel (flow limiting)"，
+        # 前端解析不了，也没法区分是限流还是熔断
+        fallback:
+          mode: response
+          response-status: 429
+          content-type: application/json
+          response-body: '{"code":429,"message":"下游服务暂时不可用，请稍后重试","data":null}'
+      datasource:
+        gw-degrade:
+          nacos:
+            server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
+            group-id: SENTINEL_GROUP
+            data-id: gateway-gw-degrade-rules
+            data-type: json
+            rule-type: gw-degrade
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}

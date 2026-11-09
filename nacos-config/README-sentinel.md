@@ -19,10 +19,11 @@
 | `file-share-service-degrade-rules` | `SENTINEL_GROUP` | 新建，内容 `[]` |
 | `user-service-degrade-rules` | `SENTINEL_GROUP` | 新建，内容 `[]` |
 | `gateway-degrade-rules` | `SENTINEL_GROUP` | 新建，内容 `[]` |
+| `gateway-gw-degrade-rules` | `SENTINEL_GROUP` | 新建，有网关熔断规则 |
 
 后六个服务没有 Feign 调用，暂时没有熔断对象，占位 `[]`。留着是因为所有服务都 import 了 `pan-Sentinel`，`data-id` 是按 `${spring.application.name}` 拼的，缺了会读不到。以后这些服务加了 Feign 调用，直接往对应文件里补规则即可。
 
-网关的熔断对象是路由，规则类型是 `gw-degrade` 而不是 `degrade`。要做网关熔断得单独加一个 datasource 配置项，本次没做。
+`gateway-degrade-rules` 和 `gateway-gw-degrade-rules` 是两份不同的东西：前者挂在 `pan-Sentinel` 的 `degrade` datasource 上（网关没有 Feign 调用，永远是空），后者是网关专属的 `gw-degrade`（见下节）。
 
 覆盖 `pan-common` 前先比对线上内容，那份文件还承载着 `server.shutdown`、日志级别、内部调用地址等配置。
 
@@ -130,3 +131,54 @@ Dashboard 上该资源的熔断状态会变成 OPEN。
 - 要固化，必须直接改 Nacos 上那份 JSON
 
 规则以 Nacos 为准，Dashboard 只用来观察和临时试参数。
+
+## 十、网关熔断
+
+前九节讲的是服务间 Feign 调用的熔断，网关是另一套。
+
+**为什么不一样**：网关不发起 Feign 调用，它的"被保护对象"是路由转发——某个下游服务响应变慢，网关应该快速失败而不是继续把请求转过去堆积。
+
+**配置在哪**：`pan-gateways`（网关专属 dataId），不是 `pan-Sentinel`。因为规则类型不同，混在一起会让其他 10 个服务去拉一份用不上的规则。
+
+```yaml
+spring.cloud.sentinel:
+  scg:
+    order: -1                      # SentinelGatewayFilter 要早于路由转发
+    fallback:                      # 熔断打开时的响应
+      mode: response
+      response-status: 429
+      content-type: application/json
+      response-body: '{"code":429,"message":"下游服务暂时不可用，请稍后重试","data":null}'
+  datasource.gw-degrade.nacos:
+    data-id: gateway-gw-degrade-rules
+    rule-type: gw-degrade          # 不是 degrade
+```
+
+不写任何 Java 代码。`spring-cloud-alibaba-sentinel-gateway` 的 `SentinelSCGAutoConfiguration` 已自动注册 `SentinelGatewayFilter` 和 `SentinelGatewayBlockExceptionHandler`，`scg.fallback.*` 就是给它用的配置项。
+
+**规则里的 resource 是路由 ID**，来自 `pan-gateways` 里 `routes[].id`：
+
+```json
+{
+  "resource": "file-upload-service",
+  "grade": 0,
+  "count": 3000,
+  "slowRatioThreshold": 0.5,
+  "timeWindow": 10,
+  "minRequestAmount": 5,
+  "statIntervalMs": 10000
+}
+```
+
+`file-upload-service` 就是路由定义的 id，不是服务名也不是 URL。填错了规则静默不生效。
+
+**为什么用 grade 0（慢调用比例）而不是 grade 1（异常比例）**：`SentinelGatewayFilter` 的埋点只包住转发动作本身，下游返回 5xx 不会被记成"异常"，异常比例统计不到。而响应时间是从进入到退出实测的，慢调用比例能真实反映下游是否已经卡住。
+
+下游直接连不上（连接被拒）时 RT 很短，不算慢调用——但那种情况请求本身就快速失败了，没有堆积风险，不需要熔断。
+
+**验证**：
+
+1. 网关启动日志出现 `[Sentinel SpringCloudGateway] register SentinelGatewayFilter with order: -1`
+2. 把某个下游服务停掉，或者用 `tc` 注入延迟让它变慢
+3. 连续请求该路由超过 `minRequestAmount` 次，Dashboard 的「熔断规则」里该 resource 状态变 OPEN
+4. 熔断期间请求返回上面配的 JSON，而不是 502 或超时

@@ -1,0 +1,74 @@
+[
+  {
+    "resource": "user-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-upload-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-download-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-preview-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-search-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-manage-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "file-share",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  },
+  {
+    "resource": "ai-service",
+    "grade": 0,
+    "count": 3000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 10000,
+    "slowRatioThreshold": 0.5
+  }
+]

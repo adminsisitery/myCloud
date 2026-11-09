@@ -51,3 +51,21 @@ spring:
               - Content-Disposition
               - Content-Length
             max-age: 3600
+    sentinel:
+      scg:
+        order: -1
+        fallback:
+          mode: response
+          response-status: 429
+          content-type: application/json
+          response-body: '{"code":429,"message":"下游服务暂时不可用，请稍后重试","data":null}'
+      datasource:
+        gw-degrade:
+          nacos:
+            server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}
+            group-id: SENTINEL_GROUP
+            data-id: gateway-gw-degrade-rules
+            data-type: json
+            rule-type: gw-degrade
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}
