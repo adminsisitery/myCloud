@@ -17,6 +17,15 @@ spring:
       - "optional:nacos:pan-mail?group=pan&refreshEnabled=true"
       - "optional:nacos:user-service?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-Sentinel?group=pan&refreshEnabled=true"
+  # 数据库迁移（P0-6）：user-service 是 MySQL 归属方，只在这里执行 DDL
+  flyway:
+    enabled: true
+    # 已手工建过表的环境：基线定在 0，V1 仍会执行；
+    # 迁移脚本全部 IF NOT EXISTS，重复执行安全
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    validate-on-migrate: true
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:47.95.192.221:8848}

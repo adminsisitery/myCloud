@@ -29,6 +29,18 @@
     </properties>
 
     <dependencies>
+        <!--
+          Flyway：MySQL schema 版本化迁移（P0-6）。
+          user-service 是 MySQL 数据归属方，迁移只在这里跑；
+          其他服务启动时不做任何 DDL，避免 12 个实例互相抢着建表。
+          版本由 spring-boot-starter-parent 管理（Boot 3.2.3 → Flyway 9.22.x），
+          9.x 的 flyway-core 已内置 MySQL 支持，不需要额外的 flyway-mysql。
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- HTTP 接口、参数校验、邮件验证码 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,0 +1,42 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "cn_text": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "cjk_width"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "long"
+      },
+      "fileName": {
+        "type": "text",
+        "analyzer": "cn_text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "cn_text"
+      },
+      "userId": {
+        "type": "long"
+      },
+      "fileType": {
+        "type": "keyword"
+      }
+    }
+  }
+}
