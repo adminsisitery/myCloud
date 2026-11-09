@@ -1,0 +1,79 @@
+name: 安装 myRC
+description: |
+  从 Gitee 克隆 myRC 源码并安装（含 semgrep、依赖审计、trivy、gitleaks、osv-scanner）。
+
+  单独抽成 composite action 是因为审计作业和基线作业都要这套环境，
+  复制两份迟早会漂移。必须在 actions/setup-python 之后使用。
+
+inputs:
+  repo-url:
+    description: myRC 源码仓库地址
+    required: false
+    default: https://gitee.com/feifei-coder/airc.git
+  ref:
+    description: 分支、标签或提交
+    required: false
+    default: main
+  token:
+    description: 仓库转私有后使用的 Gitee 令牌（公开仓库留空）
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: 克隆 myRC 源码
+      shell: bash
+      env:
+        REPO_URL: ${{ inputs.repo-url }}
+        REF: ${{ inputs.ref }}
+        TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        url="$REPO_URL"
+        if [ -n "${TOKEN:-}" ]; then
+          url="https://oauth2:${TOKEN}@${url#https://}"
+        fi
+        # 必须克隆到工作区之外：myRC 自带 benchmarks/cases（故意写坏的样本代码），
+        # 放进被审仓库里会被自己扫到，报出几十条误报。
+        tool_dir="$RUNNER_TEMP/myrc-tool"
+        rm -rf "$tool_dir"
+        git clone --depth 1 "$url" "$tool_dir"
+        git -C "$tool_dir" fetch --depth 1 origin "$REF"
+        git -C "$tool_dir" checkout --detach FETCH_HEAD
+        git -C "$tool_dir" log --oneline -1
+
+    - name: 安装 myRC
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        # semgrep 走 Python 包；dependency-audit 带 pip-audit，缺了就没有依赖漏洞结论
+        pip install "$RUNNER_TEMP/myrc-tool[semgrep,dependency-audit,external,quality]"
+        myrc --version
+
+    - name: 安装系统扫描器
+      # 装不上不阻塞：缺失会记进报告的“覆盖缺口”，不会静默跳过
+      shell: bash
+      continue-on-error: true
+      run: |
+        set -uo pipefail
+        # gitleaks：密钥扫描（含 git 历史）
+        tag=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+        if [ -n "$tag" ]; then
+          ver="${tag#v}"
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/${tag}/gitleaks_${ver}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+        fi
+        # trivy：依赖 CVE + IaC/容器配置
+        curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+        # osv-scanner：跨生态依赖漏洞（Java 的 pom.xml 靠它，缺了依赖一项直接是缺口）
+        osv_url=$(curl -sSL https://api.github.com/repos/google/osv-scanner/releases/latest \
+          | grep -o '"browser_download_url": *"[^"]*linux_amd64[^"]*"' | head -1 | cut -d'"' -f4)
+        if [ -n "$osv_url" ]; then
+          sudo curl -sSL "$osv_url" -o /usr/local/bin/osv-scanner
+          sudo chmod +x /usr/local/bin/osv-scanner
+        fi
+        gitleaks version || true
+        trivy --version || true
+        osv-scanner --version || true

@@ -25,63 +25,16 @@ jobs:
           # 增量审计要拿 base 分支做 diff，浅克隆取不到
           fetch-depth: 0
 
-      - name: 拉取 myRC（Gitee）
-        env:
-          MYRC_REPO_URL: ${{ vars.MYRC_REPO_URL || 'https://gitee.com/feifei-coder/airc.git' }}
-          MYRC_REF: ${{ vars.MYRC_REF || 'main' }}
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          set -euo pipefail
-          url="$MYRC_REPO_URL"
-          # 公开仓库直接克隆，无需任何密钥；
-          # 若将来转私有，配一个 secrets.GITEE_TOKEN（勾 projects 权限）即可，workflow 不用改。
-          if [ -n "${GITEE_TOKEN:-}" ]; then
-            url="https://oauth2:${GITEE_TOKEN}@${url#https://}"
-          fi
-          # 必须克隆到工作区之外：myRC 自带 benchmarks/cases（故意写坏的样本代码），
-          # 放进仓库里会被自己扫到，报出几十条误报。
-          tool_dir="$RUNNER_TEMP/myrc-tool"
-          git clone --depth 1 "$url" "$tool_dir"
-          git -C "$tool_dir" fetch --depth 1 origin "$MYRC_REF"
-          git -C "$tool_dir" checkout --detach FETCH_HEAD
-          git -C "$tool_dir" log --oneline -1
-          echo "MYRC_TOOL_DIR=$tool_dir" >> "$GITHUB_ENV"
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: 安装 myRC
-        run: |
-          python -m pip install --upgrade pip
-          # semgrep 走 Python 包；dependency-audit 带 pip-audit，缺了就没有依赖漏洞结论
-          pip install "$MYRC_TOOL_DIR[semgrep,dependency-audit,external,quality]"
-          myrc --version
-
-      - name: 安装系统扫描器
-        # 装不上不阻塞：缺失会记进报告的“覆盖缺口”，不会静默跳过
-        continue-on-error: true
-        run: |
-          set -uo pipefail
-          # gitleaks：密钥扫描（含 git 历史）
-          tag=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
-          if [ -n "$tag" ]; then
-            ver="${tag#v}"
-            curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/${tag}/gitleaks_${ver}_linux_x64.tar.gz" \
-              | sudo tar -xz -C /usr/local/bin gitleaks
-          fi
-          # trivy：依赖 CVE + IaC/容器配置
-          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
-          # osv-scanner：跨生态依赖漏洞（Java 的 pom.xml 靠它，缺了依赖一项直接是缺口）
-          osv_url=$(curl -sSL https://api.github.com/repos/google/osv-scanner/releases/latest \
-            | grep -o '"browser_download_url": *"[^"]*linux_amd64[^"]*"' | head -1 | cut -d'"' -f4)
-          if [ -n "$osv_url" ]; then
-            sudo curl -sSL "$osv_url" -o /usr/local/bin/osv-scanner
-            sudo chmod +x /usr/local/bin/osv-scanner
-          fi
-          gitleaks version || true
-          trivy --version || true
-          osv-scanner --version || true
+      # 克隆 + 安装 + 装扫描器的公共逻辑，见 .github/actions/setup-myrc
+      - uses: ./.github/actions/setup-myrc
+        with:
+          repo-url: ${{ vars.MYRC_REPO_URL || 'https://gitee.com/feifei-coder/airc.git' }}
+          ref: ${{ vars.MYRC_REF || 'main' }}
+          token: ${{ secrets.GITEE_TOKEN }}
 
       - name: 执行审计
         run: |
@@ -105,6 +58,24 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: myrc.sarif
+
+      # 基线要在“工具链完整”的环境里生成：本机常常缺 semgrep、osv-scanner 会超时，
+      # 用残缺工具链生成的基线会让 CI 把漏掉的部分当成新增。
+      # 用法：commit message 里带 [baseline] 推一次，然后下载 myrc-baseline 产物覆盖仓库里的文件。
+      - name: 生成基线（提交信息含 [baseline] 时）
+        if: contains(github.event.head_commit.message, '[baseline]')
+        run: |
+          set -uo pipefail
+          # 不带 --baseline：要的是全量指纹，否则旧基线会把自己过滤掉
+          myrc audit baseline --repo . --output myrc-baseline.json
+
+      - name: 上传基线
+        if: contains(github.event.head_commit.message, '[baseline]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: myrc-baseline
+          path: myrc-baseline.json
+          if-no-files-found: error
 
       - name: 留档审计报告
         if: always()
