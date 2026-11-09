@@ -136,6 +136,22 @@ class MyGlobalFilterTest {
     }
 
     @Test
+    @DisplayName("白名单路径自带 UserId 头 → 转发前剥掉，不能让客户端决定限流身份")
+    void filter_白名单路径剥离客户端UserId头() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/shares/abc123/content")
+                        .header("UserId", "999")
+                        .build());
+
+        filter.filter(exchange, chain).block();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        // 剥干净：既不能留客户端那个值，也不能被替换成别的
+        assertThat(captor.getValue().getRequest().getHeaders().get("UserId")).isNull();
+    }
+
+    @Test
     @DisplayName("过滤器优先级为最高，鉴权先于路由转发")
     void getOrder_返回最高优先级() {
         assertThat(filter.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);

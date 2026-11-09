@@ -28,7 +28,15 @@ public class MyGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
         if (authProperties.isExcluded(path)) {
-            return chain.filter(exchange);
+            // 白名单路径不校验登录，但绝不能把客户端自带的 UserId 头原样透下去。
+            // 鉴权分支里是同名先删再写，白名单分支若直接放行，这个头就是客户端说了算：
+            // RateLimitConfig.userKeyResolver 会拿它当限流键，伪造即可轮换桶绕开全局限流，
+            // 或指定某个用户把对方额度打满。身份虽由 Sa-Token 判定不受影响，
+            // 但"客户端能决定网关认为你是谁"这件事本身不该留口子。
+            ServerWebExchange sanitized = exchange.mutate()
+                    .request(request -> request.headers(headers -> headers.remove(USER_ID_HEADER)))
+                    .build();
+            return chain.filter(sanitized);
         }
 
         final Object userId;
