@@ -16,6 +16,7 @@ spring:
       - "optional:nacos:pan-mybatis?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-sa-token?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-oss?group=pan&refreshEnabled=true"
+      - "optional:nacos:pan-rabbitmq?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-ai?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-agent?group=pan&refreshEnabled=true"
       - "optional:nacos:pan-langfuse?group=pan&refreshEnabled=true"

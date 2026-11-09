@@ -4,8 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.cloudrive.aiService.client.UserSpaceClient;
 import com.cloudrive.aiService.model.entity.FileInfo;
+import com.cloudrive.aiService.mq.AfterCommit;
+import com.cloudrive.aiService.mq.MqProducer;
 import com.cloudrive.aiService.service.DeleteFileService;
 import com.cloudrive.aiService.service.FileInfoMapperService;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.util.ExceptionUtil;
 import com.cloudrive.pan_common.util.UserContext;
@@ -18,11 +23,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 回收站服务实现（AI Agent 动作）
  * <p>
- * 逻辑照搬单体 DeleteFileServiceImpl 的软删除/恢复路径，去除 MQ/ES/PG/操作日志，
+ * 逻辑对齐 file-manage-service 的软删除/恢复路径：改完 {@code t_file_info} 后，
+ * 通过 MQ 通知 file-async-service 同步 ES 索引、PG 向量与操作日志。
  * 空间释放与归还统一调用 user-service 的 {@code /internal/space/**} 接口。
  * </p>
  *
@@ -36,11 +43,14 @@ public class DeleteFileServiceImpl implements DeleteFileService {
 
     private final FileInfoMapperService fileInfoMapperService;
     private final UserSpaceClient userSpaceClient;
+    private final MqProducer mqProducer;
 
     public DeleteFileServiceImpl(FileInfoMapperService fileInfoMapperService,
-                                 UserSpaceClient userSpaceClient) {
+                                 UserSpaceClient userSpaceClient,
+                                 MqProducer mqProducer) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.userSpaceClient = userSpaceClient;
+        this.mqProducer = mqProducer;
     }
 
     @Override
@@ -88,6 +98,7 @@ public class DeleteFileServiceImpl implements DeleteFileService {
         if (releasedBytes > 0) {
             userSpaceClient.releaseSpace(userId, releasedBytes);
         }
+        AfterCommit.run(() -> publishDeleteSideEffects(targets));
         log.info("Agent 删除文件到回收站: userId={}, fileId={}, nodes={}, bytes={}",
                 userId, fileId, targets.size(), releasedBytes);
     }
@@ -163,8 +174,45 @@ public class DeleteFileServiceImpl implements DeleteFileService {
         if (restoredBytes > 0) {
             userSpaceClient.addUsedSpace(userId, restoredBytes);
         }
+        AfterCommit.run(() -> publishRestoreSideEffects(targets));
         log.info("Agent 恢复回收站文件: userId={}, fileId={}, nodes={}, bytes={}",
                 userId, fileId, targets.size(), restoredBytes);
+    }
+
+    /** 软删除旁路消息：每个节点投递 ES 删除；普通文件额外投递 PG 删除与操作日志（失败仅 warn）。 */
+    private void publishDeleteSideEffects(List<FileInfo> targets) {
+        for (FileInfo target : targets) {
+            String displayName = buildFullName(target);
+            try {
+                mqProducer.sendIndexDelete(new FileIndexMessage(target.getId(), displayName, null,
+                        target.getUserId(), target.getFileType()));
+                if (!Boolean.TRUE.equals(target.getIsFolder())) {
+                    mqProducer.sendPgDelete(new PgIndexMessage(target.getId(), target.getUserId(), null,
+                            target.getSha256Hash(), false));
+                    mqProducer.sendLog(new OperationLogMessage(target.getUserId(), "DELETE", target.getId(),
+                            displayName, target.getFileSize(), null, null,
+                            UUID.randomUUID().toString(), LocalDateTime.now()));
+                }
+            } catch (RuntimeException e) {
+                log.warn("Agent 删除旁路消息发送失败（不影响删除结果）: fileId={}", target.getId(), e);
+            }
+        }
+    }
+
+    /** 恢复旁路消息：每个节点投递 ES 插入；普通文件额外投递 PG 重建（失败仅 warn）。 */
+    private void publishRestoreSideEffects(List<FileInfo> targets) {
+        for (FileInfo target : targets) {
+            try {
+                mqProducer.sendIndexInsert(new FileIndexMessage(target.getId(), buildFullName(target), null,
+                        target.getUserId(), target.getFileType()));
+                if (!Boolean.TRUE.equals(target.getIsFolder())) {
+                    mqProducer.sendPgInsert(new PgIndexMessage(target.getId(), target.getUserId(), null,
+                            target.getSha256Hash(), true));
+                }
+            } catch (RuntimeException e) {
+                log.warn("Agent 恢复旁路消息发送失败（不影响恢复结果）: fileId={}", target.getId(), e);
+            }
+        }
     }
 
     private void resolveNameConflict(FileInfo file, Long userId) {

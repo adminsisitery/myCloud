@@ -2,10 +2,15 @@ package com.cloudrive.aiService.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cloudrive.aiService.model.entity.FileInfo;
+import com.cloudrive.aiService.mq.AfterCommit;
+import com.cloudrive.aiService.mq.MqProducer;
 import com.cloudrive.aiService.service.FileInfoMapperService;
 import com.cloudrive.aiService.service.FileService;
 import com.cloudrive.aiService.service.StorageService;
 import com.cloudrive.pan_common.constant.CommonConstants;
+import com.cloudrive.pan_common.domain.mq.FileIndexMessage;
+import com.cloudrive.pan_common.domain.mq.OperationLogMessage;
+import com.cloudrive.pan_common.domain.mq.PgIndexMessage;
 import com.cloudrive.pan_common.enums.ErrorCode;
 import com.cloudrive.pan_common.exceotion.BusinessException;
 import com.cloudrive.pan_common.util.ExceptionUtil;
@@ -22,13 +27,15 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 文件服务实现（AI Agent 动作）
  * <p>
- * 逻辑照搬单体 FileServiceImpl 的对应方法，去除 MQ/ES 同步与秒传；
- * 配额扣减/归还由调用方（AgentActionService）通过 user-service 内网接口完成，
- * 本实现专注文件元数据与对象存储的一致性。
+ * 逻辑照搬单体 FileServiceImpl 的对应方法，不做秒传；
+ * 配额扣减/归还由调用方（AgentActionService）通过 user-service 内网接口完成。
+ * 写 {@code t_file_info} 之后通过 MQ 通知 file-async-service 同步 ES 索引与 PG 向量，
+ * 否则 Agent 新建的文件在检索里查不到。
  * </p>
  *
  * @author 飞飞
@@ -44,11 +51,14 @@ public class FileServiceImpl implements FileService {
 
     private final FileInfoMapperService fileInfoMapperService;
     private final StorageService storageService;
+    private final MqProducer mqProducer;
 
     public FileServiceImpl(FileInfoMapperService fileInfoMapperService,
-                           StorageService storageService) {
+                           StorageService storageService,
+                           MqProducer mqProducer) {
         this.fileInfoMapperService = fileInfoMapperService;
         this.storageService = storageService;
+        this.mqProducer = mqProducer;
     }
 
     @Override
@@ -111,6 +121,7 @@ public class FileServiceImpl implements FileService {
         fileInfo.setIsStarred(false);
         fileInfo.setCategoryId(FileTypeUtil.getCategoryId(suffix));
         fileInfoMapperService.save(fileInfo);
+        AfterCommit.run(() -> publishUploadSideEffects(fileInfo));
 
         log.info("Agent 文档保存成功: userId={}, fileId={}, size={}", userId, fileInfo.getId(), file.getSize());
         return fileInfo.getPath();
@@ -188,6 +199,7 @@ public class FileServiceImpl implements FileService {
                 }
             }
         }
+        AfterCommit.run(() -> publishRenameSideEffects(fileInfo));
         log.info("Agent 重命名文件成功: userId={}, fileId={}, newName={}", fileInfo.getUserId(), fileId, name);
     }
 
@@ -308,5 +320,60 @@ public class FileServiceImpl implements FileService {
         }
         String normalized = path.replace('\\', '/');
         return normalized.endsWith("/") ? normalized : normalized + "/";
+    }
+
+    /**
+     * 新建文件的旁路消息：ES 插入 + PG 重建 + 操作日志。
+     * <p>
+     * 正文不随消息传（Agent 手上只有 {@code MultipartFile}，没有可复用文本），
+     * 与上传链路保持一致；ES 侧靠文件名检索，正文检索由 PG 向量的
+     * {@code rebuild=true} 从 OSS 重新提取。
+     * </p>
+     *
+     * @param file 已落库的文件
+     */
+    private void publishUploadSideEffects(FileInfo file) {
+        String displayName = buildFullName(file);
+        try {
+            mqProducer.sendIndexInsert(new FileIndexMessage(file.getId(), displayName, null,
+                    file.getUserId(), file.getFileType()));
+            mqProducer.sendPgInsert(new PgIndexMessage(file.getId(), file.getUserId(), null,
+                    file.getSha256Hash(), true));
+            mqProducer.sendLog(new OperationLogMessage(file.getUserId(), "UPLOAD", file.getId(),
+                    displayName, file.getFileSize(), null, null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            log.warn("Agent 新建文件旁路消息发送失败（不影响保存结果）: fileId={}", file.getId(), e);
+        }
+    }
+
+    /**
+     * 重命名的旁路消息：ES 更新 + 操作日志。
+     * <p>
+     * ES 文档里只有 {@code fileName} 没有路径，所以改名必须推更新，
+     * 否则检索结果里会一直显示旧名字；移动不影响文件名，无需同步。
+     * </p>
+     *
+     * @param file 重命名后的文件
+     */
+    private void publishRenameSideEffects(FileInfo file) {
+        String displayName = buildFullName(file);
+        try {
+            mqProducer.sendIndexUpdate(new FileIndexMessage(file.getId(), displayName, null,
+                    file.getUserId(), file.getFileType()));
+            mqProducer.sendLog(new OperationLogMessage(file.getUserId(), "RENAME", file.getId(),
+                    displayName, file.getFileSize(), file.getFilename(), null,
+                    UUID.randomUUID().toString(), LocalDateTime.now()));
+        } catch (RuntimeException e) {
+            log.warn("Agent 重命名旁路消息发送失败（不影响重命名结果）: fileId={}", file.getId(), e);
+        }
+    }
+
+    private String buildFullName(FileInfo file) {
+        if (Boolean.TRUE.equals(file.getIsFolder())) {
+            return file.getFilename();
+        }
+        String suffix = file.getFileSuffix();
+        return file.getFilename() + (suffix == null || suffix.isEmpty() ? "" : "." + suffix);
     }
 }
