@@ -169,6 +169,12 @@ public class RecycleBinServiceImpl implements RecycleBinService {
             if (!Objects.equals(file.getUserId(), currentUserId)) {
                 ExceptionUtil.throwBizException(ErrorCode.NO_PERMISSION);
             }
+            // 彻底删除只处理回收站里的文件。放活文件进来会同时踩两个坑：
+            // ① 删行 + 删 OSS 对象 → 内容直接没了，用户连回收站都找不回；
+            // ② 配额只在软删除时退还，这条路径不退 → used_space 永久被占。
+            if (!Boolean.TRUE.equals(file.getIsDeleted())) {
+                ExceptionUtil.throwBizException(ErrorCode.FILE_NOT_IN_TRASH);
+            }
             if (!Boolean.TRUE.equals(file.getIsFolder())) {
                 deletePhysicalObjectIfUnreferenced(file);
             }

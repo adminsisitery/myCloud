@@ -272,6 +272,24 @@ class RecycleBinServiceImplTest {
     }
 
     @Test
+    @DisplayName("tureDeleteFile：活文件（不在回收站）→ 拒绝，不删行也不删 OSS")
+    void tureDeleteFile_活文件时拒绝() {
+        // 这条路径没有退还配额，若允许直接删活文件，used_space 会被永久占住，
+        // 而文件内容已经随 OSS 对象一起消失，用户无从恢复。
+        when(fileInfoMapperService.getById(1L)).thenReturn(file(1L, USER_ID, false, 10L, false));
+
+        try (MockedStatic<UserContext> ctx = mockStatic(UserContext.class)) {
+            ctx.when(UserContext::getCurrentUserId).thenReturn(USER_ID);
+
+            BusinessException ex = bizExceptionOf(() -> service.tureDeleteFile("1"));
+
+            assertThat(ex.getCode()).isEqualTo(400);
+        }
+        verifyNoInteractions(storageService);
+        verify(fileInfoMapperService, never()).removeById(anyLong());
+    }
+
+    @Test
     @DisplayName("tureDeleteFile：秒传产生的多引用 → 保留物理对象，只删这一行")
     void tureDeleteFile_多引用时保留物理对象() {
         FileInfo f = file(1L, USER_ID, false, 10L, true);
