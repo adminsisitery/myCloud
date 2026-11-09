@@ -8,16 +8,40 @@
 
 ## 完成状态（2026-11-09）
 
+> 提交号按重写后的历史更新：`/docs/` 入库时清掉了旧提交里的明文密钥，后续 P0-3/P0-4/P0-6 是在新历史上重新落盘的。
+
 | 条目 | 状态 | 提交 | 验收方式 |
 |---|---|---|---|
-| P0-2 `docs/` 入库 | ✅ 完成 | `f94cc62` | 6 份文档入库；入库前脱敏了 Nacos IP/密码、Woodpecker secret、测试账号密码 |
-| P0-3 `/internal/**` 鉴权 | ✅ 完成 | `d40ff9e` | pan-common 拦截器 + 全局 Feign 注入；token 缺失一律 401；12 个服务编译通过 |
-| P0-4 端口收敛 | ✅ 完成 | `afae020` / `5730317` | 12 服务只走 bridge；新增 `docker-compose.middleware.yml`，6 个中间件不发布任何宿主机端口 |
+| P0-2 `docs/` 入库 | ✅ 完成 | `c13fc74` | 6 份文档入库；入库前脱敏了 Nacos IP/密码、auth token secret key、Woodpecker secret、测试账号密码 |
+| P0-3 `/internal/**` 鉴权 | ✅ 完成 | `f1cf4a9` | pan-common 拦截器（常量时间比较 + ±60s 防重放）+ 全局 Feign 注入；token 缺失一律 401；12 个服务编译通过 |
+| P0-4 端口收敛 | ✅ 完成 | `be8be9c` | 12 服务只走 bridge；新增 `docker-compose.middleware.yml`，6 个中间件零 `ports`，`docker compose config` 实测只有 gateway 发布 8090 |
 | P0-5 网关 CORS + 限流 | ✅ CORS 完成 | `82cdf68` | 预检 200、白名单外 403；限流已有 `@RateLimit`，全局限流待补 |
-| P0-6 Flyway | ✅ 完成 | 本次 | `V1__init_mysql.sql` 9 张表，本机 MySQL 8 实跑通过 + 幂等；PG/ES 各有脚本 |
+| P0-6 Flyway | ✅ 完成 | `84725f9` | `V1__init_mysql.sql` 9 张表，本机 MySQL 8 实跑通过 + 幂等；PG/ES 各有脚本 |
+| 审计门禁 | ✅ 完成 | `20a2039` | 仓库变量 `MYRC_FAIL_ON=high`；基线 2027 条；CI 连跑稳定 0 问题 |
 | P1-2 Testcontainers | ⏳ 可开始 | — | P0-6 已解除阻塞 |
 
 **P0 剩余**：P0-1（`.gitignore` 补漏）、P0-5 的全局限流、P0-7（CI 收敛，实际已只剩 GitHub Actions 一套）。
+
+### 审计门禁的两个坑（已修，别再踩）
+
+1. **报告不能落在工作区里**。`--output myrc-report.json` 写在仓库根目录，下一轮审计会把它当源码扫，文件集从 509 变成 510，扫描器结果随之漂移。现在两份报告都写 `$RUNNER_TEMP`。
+2. **门禁只能由一次调用判定**。同一环境连跑两次（JSON + SARIF），gitleaks 的历史扫描一次 7 条、一次 8 条，构建一绿一红。现在只有 JSON 那次带 `--fail-on`，SARIF 降级为 `continue-on-error` 的展示步骤。
+
+### 仍然存在的暴露（需人工处理，非代码可解）
+
+`gitleaks` 在 git 历史里查到 **7 处真实密钥**，仓库是 public，等于已经公开：
+
+| 位置（历史提交） | 配置项 | 需要动作 |
+|---|---|---|
+| `src/main/resources/application.yml:135`（`8c5855a`） | `api-key`（DeepSeek） | 去 DeepSeek 控制台吊销重签 |
+| `src/main/resources/application.yml:141`（`8c5855a`） | `api-key`（DashScope） | 去阿里百炼吊销重签 |
+| `src/main/resources/application.yml:135`（`f9d38c5`） | `embedding-api-key`（DashScope） | 同上 |
+| `src/main/resources/local_application.yml:3`（`ebde68e`） | `api-key` | 确认归属后吊销 |
+| `src/main/resources/application.yml:246`（`10a63ae`） | `secret-key`（Langfuse） | 去 Langfuse 轮换 |
+| `src/main/resources/application.yml:91`（`2d81612`） | `client-secret`（GitHub OAuth） | GitHub OAuth App 重新生成 |
+| `deploy/woodpecker/docker-compose.yml:19`（`168482d`） | `WOODPECKER_GITEA_SECRET` | Woodpecker/Gitea 重置 |
+
+这些指纹已在基线里，所以 CI 不会报警——**但这只代表不再打扰，不代表安全**。轮换完成后基线里的对应条目可以删掉；想彻底从历史抹掉需要 `git filter-repo`，代价是所有协作者重新 clone，且 GitHub 上的 fork/缓存仍可能残留，所以**轮换优先于重写历史**。
 
 ---
 
